@@ -75,10 +75,11 @@ Use a paid **Starter** Node web service in Oregon:
 | Setting | Value |
 | --- | --- |
 | Build | `npm ci && npm run build` |
+| Build environment | `NODE_ENV=production`, `NPM_CONFIG_INCLUDE=dev` (includes the interface build tools) |
 | Start | `npm start` |
 | Health check | `/healthz` |
 | Instances | One |
-| Secrets | The three credentials from `.env.example`, plus a long random `SESSION_SECRET` |
+| Server settings | `DEEPGRAM_API_KEY`, `RENDER_API_KEY`, `RENDER_WORKSPACE_ID`, and a long random `SESSION_SECRET` |
 | Node | 24 or later |
 
 Render supplies `PORT`; the server binds to `0.0.0.0`. Keep one instance because this prototype stores visitor sessions and limits in memory. Deploying or restarting clears those sessions.
