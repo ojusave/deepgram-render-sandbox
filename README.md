@@ -1,128 +1,112 @@
 <div align="center">
 
-# Sidekick
+# Think Aloud
 
-Ask a question about a CSV. Get a calculated answer, a chart, and a table you can download.
+Practice explaining and fixing a small Python bug with a voice coach. Run real checks, then keep your code and conversation in a recap.
 
-**Deepgram Voice Agent API + Render Sandboxes**
+[![Deepgram Voice Agent](https://img.shields.io/badge/Deepgram-Voice_Agent-18755b)](https://developers.deepgram.com/docs/voice-agent) [![Render Sandboxes](https://img.shields.io/badge/Render-Sandboxes-4149b7)](https://render.com/docs/sandboxes) [![Node.js 24+](https://img.shields.io/badge/Node.js-24%2B-303846)](https://nodejs.org/)
 
-[Quickstart](#quickstart) · [How it works](#how-it-works) · [Checks](#checks) · [Limits](#limits)
+[Quickstart](#quickstart) · [How it works](#how-it-works) · [Deploy](#deploy-on-render) · [Limits and data](#limits-and-data)
 
 </div>
 
-Sidekick starts with a fictional shop's monthly sales data. Ask “Which products explain the revenue drop?” by voice or text. Deepgram writes a small Python program, a fresh Render Sandbox runs it against the complete CSV, and the answer appears next to the conversation. The agent also speaks the result when voice is enabled.
+The exercise starts with a function that calculates the average customer wait. Ordinary inputs work, but an empty list causes division by zero. Explain what you notice, edit the function, and run the three checks. The coach asks follow-up questions using your saved code and actual results. It cannot edit your code or mark an answer correct.
 
-This is a community integration prototype, not an official Deepgram or Render partnership.
+Deepgram handles the conversation. Render provides a separate temporary practice computer, called a **sandbox**, that runs your code throughout the session. This is an independent integration demo, not an official partnership or a hiring assessment.
 
 ## Quickstart
 
-You need Node.js 24 or later, a Deepgram API key with Voice Agent access, and a Render API key for a workspace with Sandboxes enabled.
+### Prerequisites
 
-Run these commands in your terminal:
+- Node.js 24 or later and access to this repository. It is currently private.
+- A Deepgram API key with Voice Agent access.
+- A Render API key and a workspace with Sandboxes enabled. Running this example consumes paid provider usage.
+
+In your terminal, download the project and enter its folder:
 
 ```sh
-# Download this repository and enter its folder.
+# Clone the project. Your GitHub account must have access to this private repository.
 git clone https://github.com/ojusave/deepgram-render-sandbox.git
 cd deepgram-render-sandbox
 
-# Install the exact dependency versions and create local server settings.
+# Install the locked dependency versions and create local server settings.
 npm ci
 cp .env.example .env
 ```
 
-Open `.env` and fill in `DEEPGRAM_API_KEY`, `RENDER_API_KEY`, and `RENDER_WORKSPACE_ID`. Credentials stay on the server. Never add them to browser code or commit them.
+Open `.env` in your editor and fill in these values:
+
+| Setting | Purpose |
+| --- | --- |
+| `DEEPGRAM_API_KEY` | Connects the server to the [Deepgram Voice Agent](https://developers.deepgram.com/docs/voice-agent). |
+| `RENDER_API_KEY` | Lets the server create and close [Render Sandboxes](https://render.com/docs/sandboxes). |
+| `RENDER_WORKSPACE_ID` | Selects your sandbox-enabled workspace. Find it in Render workspace settings. |
+| `SESSION_SECRET` | A long random string used to sign browser session cookies. Required for a stable hosted session configuration. |
+
+Keys stay on the web server. They are never supplied to learner code or included in the browser bundle. Do not commit `.env`.
 
 ```sh
-# Package the interface, then start the local server.
+# Build the browser interface, then start the web server.
 npm run build
 npm start
 ```
 
-Open [localhost:4399](http://localhost:4399). Choose **Which region performed better?** The fictional sample totals are **West: $65,000** and **East: $56,500**. Open **Activity** to see the generated Python and confirmed sandbox cleanup.
+The server prints `Think Aloud listening on port 4399`. Open [localhost:4399](http://localhost:4399), choose **Start with voice**, and allow microphone access. **Use text instead** is available for a quiet room or when a microphone is unavailable.
 
-After you ask, the progress strip explains each real step: understanding the question, preparing a temporary workspace, calculating, checking the output, and closing the workspace. The elapsed clock measures time spent; it does not estimate a completion percentage. **Activity** explains the steps and keeps code under **Technical details**. A sandbox is the temporary, separate computer workspace Render uses for the calculation.
+Your practice computer starts and the original code runs. You should see:
 
-Choose **Talk** to allow microphone access. **End voice** releases the microphone. **Stop** ends the connection and stops any active calculation. You can always type instead.
+```text
+Several customers: Passed
+No customers: Needs a fix
+ZeroDivisionError: division by zero
+Partial minutes: Passed
+```
+
+Explain the bug to the coach. Edit `average_wait` so it returns `0` when there are no customers, while keeping ordinary averages working. Choose **Run checks**, or ask the coach to run them. All three should pass after a correct fix. New edits are explicitly marked as untested until checked again.
+
+Ask for feedback on your explanation. Choose **Finish practice** to close the temporary computer, then **Download recap** to save your code, check results, and conversation as a text file. Closing only the voice connection keeps your exercise open; the ten-minute session limit still closes its computer.
 
 ## How it works
 
-```mermaid
-flowchart LR
-  Browser["Voice or typed question"] <--> App["Node web service"]
-  App <--> Deepgram["Deepgram Voice Agent"]
-  Deepgram -->|analyze_csv call| App
-  App -->|CSV and Python| Sandbox["Fresh Render Sandbox"]
-  Sandbox -->|Result JSON| App
-  App -->|Table and chart| Browser
-  App -->|FunctionCallResponse| Deepgram
-```
+1. Your browser connects to the Node web server. The server keeps each visitor's code and conversation separate with a signed cookie.
+2. Deepgram listens and speaks. Its managed language model requests `inspect_exercise` to read the latest saved code, or `run_checks` to test it. This request for an action is called a **function call**.
+3. The server sends the learner's Python file to that session's Render Sandbox. Each check calls the function with a fixed input in a fresh Python process. The same sandbox is reused during the exercise.
+4. The server compares returned numbers with expected values. It shows the results in the browser and returns them to the coach. Every result records which code version was checked.
+5. Finish, expiry, cancellation, and shutdown stop the owned environment. The app confirms closure before claiming cleanup is complete.
 
-A **function call** is a request from the agent to run a specific action. Deepgram requests `analyze_csv` with Python code. The server uploads the complete CSV and that code, runs Python, collects a bounded JSON file, validates its shape, and confirms the sandbox has stopped. It returns the result to Deepgram so the agent can continue speaking.
+The server runs locally during development and on a Render web service when deployed. Learner code always runs in a separate Render Sandbox. The voice connection and provider credentials remain on the trusted server.
 
-The browser uses Deepgram's microphone and playback helpers. The Node server owns the voice WebSocket, a continuous two-way connection. Browser messages cannot replace provider settings or invoke the execution tool directly.
+- [Exercise and expected results](server/exercise.js)
+- [Voice prompt and tool definitions](server/settings.js)
+- [Sandbox creation, execution, and cleanup](server/sandbox.js)
+- [Web routes and session lifecycle](server/index.js)
+- [Browser controls](web/app.js) and [interface](web/index.html)
 
-The tool uses `defer_until_eot: true`, which waits until the speaker finishes before starting execution. Cancelled calls abort their work and receive no late result. Closing the conversation also stops active execution.
-
-- [Voice configuration](server/settings.js): prompt, managed language model, speech models, and the tool definition.
-- [Sandbox runner](server/sandbox.js): offline execution, bounded file collection, cancellation, and confirmed cleanup.
-- [Web server](server/index.js): visitor sessions, audio relay, uploads, and downloads.
-- [Interface](web/app.js): voice/text controls, chart, tabs, and adjustable panes.
-
-The interface uses browser JavaScript and CSS. Express handles web requests, `ws` handles the voice connection, `csv-parse` reads spreadsheet text correctly, and Zod validates the returned data. Provider-specific behavior is kept in the configuration and sandbox modules. Dependencies are pinned in `package-lock.json`.
+The app uses the existing Express, WebSocket, Render, and Deepgram packages with a small Vite build. The editor is a native text area. There is one file and one exercise, with no project browser or terminal to configure.
 
 ## Deploy on Render
 
-Use a paid **Starter** Node web service in Oregon:
+Create a paid **Starter** Node web service with one instance:
 
 | Setting | Value |
 | --- | --- |
-| Build | `npm ci && npm run build` |
-| Build environment | `NODE_ENV=production`, `NPM_CONFIG_INCLUDE=dev` (includes the interface build tools) |
-| Start | `npm start` |
+| Build command | `npm ci && npm run build` |
+| Start command | `npm start` |
+| Build settings | `NODE_ENV=production`, `NPM_CONFIG_INCLUDE=dev` |
 | Health check | `/healthz` |
-| Instances | One |
-| Server settings | `DEEPGRAM_API_KEY`, `RENDER_API_KEY`, `RENDER_WORKSPACE_ID`, and a long random `SESSION_SECRET` |
+| Server settings | The four settings from the Quickstart |
 | Node | 24 or later |
 
-Render supplies `PORT`; the server binds to `0.0.0.0`. Keep one instance because this prototype stores visitor sessions and limits in memory. Deploying or restarting clears those sessions.
+Render supplies `PORT`; the server listens on `0.0.0.0`. Keep one instance because this prototype holds sessions and usage limits in memory. A restart ends active sessions and clears their saved state. For a multi-instance application, move those records and limits into shared storage first.
 
-## Checks
+## Limits and data
 
-```sh
-# Fast validation of input, result shape, cancellation, and cleanup without API costs.
-npm test
-
-# With the server running, exercise real Deepgram and Render calls.
-# These checks consume provider usage and stop their disposable sandboxes.
-npm run test:live
-node --env-file=.env scripts/voice-test.js
-node --env-file=.env scripts/sandbox-live-test.js
-
-# Point the typed end-to-end check at your hosted app instead.
-BASE_URL=https://your-service.onrender.com npm run test:live
-```
-
-The voice check streams an included synthetic spoken question, not your microphone. Its text is “Which region had the most revenue? Compare the totals for East and West.” Physical microphone and speaker behavior still depends on the user's browser and device.
-
-The typed check validates expected totals, actual returned speech bytes, downloadable CSV, and separation between two visitor sessions. The sandbox check exercises cancellation, absence of host credentials, and blocked outbound connectivity.
-
-## Limits
-
-- CSV only, up to 500 KB, 10,000 rows, and 30 uniquely named columns. Preview shows up to 30 rows; calculations read all rows.
-- Standard-library Python only. No package installation or outbound network access. Each sandbox has a 180-second maximum lifetime; the Python process has a 20-second execution limit.
-- Two simultaneous conversations/calculations, up to eight calculations per conversation, 30 conversation starts per hour, and 100 per day across one server process. Conversations close after 90 seconds without user activity or five minutes total. Limits reset on restart.
-- A signed browser cookie separates visitors. Uploads, conversation text, generated code, and results are held in server memory for up to one hour of inactivity. A restart clears them. No durable database is configured.
-- Audio and questions are processed by Deepgram and its managed language-model provider. Column names and five example rows enter the agent context. The full CSV and generated program go to Render Sandboxes. The collected result returns to the app and Deepgram. Use sample data.
-
-The result validator checks structure and ensures chart bars match table values. It does not verify the mathematical meaning of arbitrary generated programs. Review the answer and code before relying on them. Unknown creation outcomes or unconfirmed cleanup block additional calculations on that server rather than automatically creating another sandbox.
+- One beginner exercise, three visible checks, a ten-minute practice session, and up to 15 completed check runs. Passing these inputs does not prove a program works for every possible input or predict interview success.
+- Two active practice seats. A server process allows up to 20 session starts per hour, 60 per day, and 40 voice connections per hour. Limits reset on restart. This is a bounded demo, not a production access-control or billing system.
+- Each practice computer has outbound internet access blocked and a 12-minute hard lifetime as a cleanup backstop. Individual checks have a three-second limit. Standard-library Python only. Stopping checks closes the environment; the next run creates a new one using your saved code.
+- Audio, conversation, saved code, and check results can be processed by Deepgram and its configured language-model provider. Code also runs on Render. The web app keeps code and conversation in memory for up to an hour of inactivity, or until restart. No permanent database is configured. Use the included exercise rather than private information.
+- Refresh recovers server-saved code and results. Edits still being saved can be lost if you close the page. Download a recap before starting over or leaving. Unknown creation outcomes and unconfirmed cleanup pause new environments instead of creating duplicates.
 
 ## References
 
-- [Deepgram browser audio helpers](https://developers.deepgram.com/docs/browser-agent-javascript)
-- [Deepgram function calling](https://developers.deepgram.com/docs/voice-agents-function-calling)
-- [Deepgram cancellation events](https://developers.deepgram.com/docs/voice-agent-function-call-cancelled)
-- [Render Sandboxes TypeScript SDK](https://render.com/docs/sandboxes-sdk-typescript)
-
-## License
-
-[MIT](LICENSE)
+[Deepgram function calling](https://developers.deepgram.com/docs/voice-agents-function-calling) · [Deepgram cancellation](https://developers.deepgram.com/docs/voice-agent-function-call-cancelled) · [Render Sandbox SDK](https://render.com/docs/sandboxes-sdk-typescript) · [MIT license](LICENSE)

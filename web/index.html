@@ -1,107 +1,60 @@
 <!doctype html>
-<!-- The browser displays results; generated Python runs only in Render Sandboxes. -->
 <html lang="en">
 <head>
-  <!-- Set readable text encoding, mobile sizing, and the browser title. -->
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f7f8f5"><meta name="color-scheme" content="light">
-  <title>Sidekick | Talk to your data</title>
-  <link rel="stylesheet" href="/style.css">
+  <!-- The page has no external fonts, trackers, or required image downloads. -->
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f7f8fa" />
+  <meta name="description" content="Practice explaining and fixing a small Python bug with a voice coach and real checks." />
+  <title>Think Aloud · Debugging practice</title>
+  <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <!-- Identity and optional help stay separate from the working area. -->
-  <header class="header">
-    <a class="brand" href="/" aria-label="Sidekick home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>sidekick<span class="brand-caption">Talk to your data</span></a>
-    <details class="help">
-      <summary aria-label="Help">?</summary>
-      <div class="help-content">
-        <strong>A question in. A calculation out.</strong>
-        <p>Ask about the sample, or upload a spreadsheet saved as a CSV (.csv) file. Speak naturally or type. Your answer, chart, and downloadable table appear together.</p>
-        <p>Deepgram understands your question and writes a small program to answer it. Render runs that program in a temporary, separate computer workspace called a sandbox. It closes after the calculation. Follow each step above the conversation; Activity keeps the details.</p>
-        <p>Use sample data. Audio and questions are sent to Deepgram and its language-model provider. Column names and five example rows help Deepgram understand your file; the complete file is processed on Render. This demo keeps your data temporarily for up to one hour without activity. Restarting the app clears it.</p>
-        <p>CSV only, up to 500 KB and 10,000 rows. Each conversation lasts up to five minutes.</p>
-        <a href="https://github.com/ojusave/deepgram-render-sandbox" target="_blank" rel="noreferrer">View source ↗</a>
-      </div>
-    </details>
+  <!-- Keyboard users can skip the top bar and go straight to the exercise. -->
+  <a class="skip" href="#exercise">Skip to exercise</a>
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Think Aloud home"><span class="brand-mark" aria-hidden="true">ta.</span>think aloud<span class="demo-label">practice lab</span></a>
+    <div class="top-meta"><span class="live-dot" aria-hidden="true"></span><span>Powered by Deepgram + Render</span></div>
   </header>
   <main>
-    <!-- One toolbar identifies the active file and offers an optional replacement. -->
-    <section class="workspace" aria-label="Data conversation">
-      <div class="toolbar">
-        <div class="file"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 9h16M10 9v12M4 15h16"/></svg><span id="filename">Monthly sales.csv</span><span id="row-count" class="muted"></span><span id="sample-label" class="sample-label">Sample</span></div>
-        <div class="file-actions"><button id="sample" class="text-button" hidden>Use sample</button><button id="upload" class="quiet-button">Upload CSV <span aria-hidden="true">↑</span></button><input type="file" id="file-input" accept=".csv,text/csv" hidden></div>
-      </div>
-      <div id="error" class="error" role="alert" hidden></div>
-      <!-- The current step is visible above every tab. The clock is separate from announcements. -->
-      <section id="progress" class="progress" aria-label="Question progress" hidden>
-        <div class="progress-heading"><span id="progress-marker" aria-hidden="true">◌</span><strong id="progress-title"></strong><span id="progress-elapsed" class="progress-elapsed" aria-live="off"></span><button id="stop" class="quiet-button" hidden>Stop</button></div>
-        <p id="progress-detail"></p>
-        <ol id="progress-steps" aria-label="Calculation steps"></ol>
-        <p id="progress-announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
-      </section>
-      <!-- The divider is draggable and keyboard-adjustable on wide screens. -->
-      <div id="workbench" class="workbench">
-        <section class="conversation" aria-label="Ask about your data">
-          <div class="conversation-bar"><span>Conversation</span><button id="clear" class="text-button" disabled>Clear</button></div>
-          <div id="conversation-scroll" class="conversation-scroll">
-            <div id="welcome" class="welcome">
-              <span class="eyebrow">A second pair of eyes</span>
-              <h1>What’s in the numbers?</h1>
-              <p>Ask a question. Get a calculated answer.</p>
-              <div id="suggestions" class="suggestions" aria-label="Example questions">
-                <button data-question="Which products explain the revenue drop from August to September?">What drove the revenue drop?<span aria-hidden="true">↗</span></button>
-                <button data-question="Compare total revenue by region and show the difference.">Which region performed better?<span aria-hidden="true">↗</span></button>
-                <button data-question="What was the average revenue per order for each product across both months?">Compare revenue per order<span aria-hidden="true">↗</span></button>
-              </div>
-            </div>
-            <div id="messages" role="log" aria-label="Conversation messages" aria-live="polite"></div>
-          </div>
-          <!-- Voice starts only after a deliberate click. Text remains an equal input option. -->
-          <div class="composer">
-            <div class="voice-row"><button id="talk" class="talk-button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg><span>Talk</span></button><span id="voice-state" class="muted">Or type a question below</span></div>
-            <form id="ask-form">
-              <label class="sr-only" for="question">Ask about your data</label>
-              <textarea id="question" rows="2" maxlength="1000" placeholder="Ask about your data…" disabled></textarea>
-              <button id="ask" type="submit" aria-label="Send question" disabled>↑</button>
-            </form>
-          </div>
-        </section>
-        <div id="divider" class="divider" role="separator" tabindex="0" aria-label="Resize conversation" aria-orientation="vertical" aria-valuemin="30" aria-valuemax="65" aria-valuenow="42"></div>
-        <section class="inspector" aria-label="Data and answers">
-          <!-- Tabs hide detail until it is useful without making it disappear. -->
-          <div class="panel-bar">
-            <div role="tablist" aria-label="Workspace views">
-              <button id="tab-data" role="tab" aria-selected="true" aria-controls="panel-data">Data</button>
-              <button id="tab-result" role="tab" aria-selected="false" aria-controls="panel-result" tabindex="-1">Answer</button>
-              <button id="tab-activity" role="tab" aria-selected="false" aria-controls="panel-activity" tabindex="-1">Activity<span id="activity-dot" aria-hidden="true"></span></button>
-            </div>
-            <a id="download" class="text-button" href="/api/download" download hidden>Download CSV ↓</a>
-          </div>
-          <div id="panel-data" role="tabpanel" aria-labelledby="tab-data" tabindex="0">
-            <div class="table-wrap" id="data-table"></div><p id="preview-note" class="panel-note"></p>
-          </div>
-          <div id="panel-result" role="tabpanel" aria-labelledby="tab-result" tabindex="0" hidden>
-            <div id="result-empty" class="empty"><span aria-hidden="true">↗</span><p>Your answer will appear here.</p><small>Ask by voice or type a question.</small></div>
-            <div id="result-content" hidden><p class="eyebrow" id="result-provenance">Calculated from your data</p><h2 id="result-title"></h2><p id="result-summary"></p><div id="chart" aria-label="Result chart"></div><div class="table-wrap" id="result-table"></div></div>
-          </div>
-          <div id="panel-activity" role="tabpanel" aria-labelledby="tab-activity" tabindex="0" hidden>
-            <div id="activity-empty" class="empty"><span aria-hidden="true">⌘</span><p>No calculations yet.</p><small>Follow each step here after you ask a question.</small></div>
-            <div id="activity-content" hidden>
-              <h2 id="activity-title">What happened</h2>
-              <p class="activity-explanation">A sandbox is a temporary computer workspace. Render uses one for your calculation, then closes it.</p>
-              <ol id="activity-history" aria-label="Detailed calculation progress"></ol>
-              <!-- Code and service identifiers are optional, after the everyday explanation. -->
-              <details id="technical-details"><summary>Technical details</summary><dl id="run-details"></dl><p class="panel-note">The program below is written in Python, a programming language. It reads your file and calculates the answer.</p><pre id="code"></pre><pre id="stderr" hidden></pre></details>
-            </div>
-          </div>
-        </section>
-      </div>
-      <!-- Status reports actual work and stays visible regardless of the selected tab. -->
-      <div class="statusbar" role="status"><span id="status-dot" class="status-dot"></span><span id="status">Loading data…</span><span class="session-note">This session only</span></div>
+    <!-- A short introduction explains the task before exposing any technical controls. -->
+    <section class="intro" aria-labelledby="page-title">
+      <div><p class="eyebrow">A SMALL BUG. A BETTER EXPLANATION.</p><h1 id="page-title">Practice thinking out loud.</h1><p class="lede">Fix a little code. Talk through your reasoning.<br class="desktop-break" /> Your coach helps you find your way, one question at a time.</p></div>
+      <div class="session-meta"><span class="meta-icon" aria-hidden="true">◷</span><div><strong id="clock">10-minute practice</strong><span>Python · Beginner friendly</span></div></div>
     </section>
-    <footer><span>Deepgram <span class="multiply">×</span> Render Sandboxes</span><span>Community prototype · Sample data recommended</span></footer>
+    <div id="error" class="error" role="alert" hidden></div>
+    <!-- One conversational panel and one task panel keep the learner's next action in view. -->
+    <div class="practice-layout">
+      <section class="coach-panel" aria-labelledby="coach-heading">
+        <div class="panel-label"><span class="eyebrow" id="coach-heading">YOUR PRACTICE PARTNER</span><span id="coach-tag" class="small-tag">Ready when you are</span></div>
+        <div class="voice-scene" id="voice-scene" data-mode="quiet" aria-hidden="true"><div class="voice-ring"><div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div></div>
+        <div class="coach-intro" id="coach-intro"><h2>A conversation,<br /> with room to think.</h2><p>Explain what you notice. Ask for a hint. Your coach can check the code you’re working on.</p></div>
+        <!-- Voice is the primary path. Text remains available for quiet rooms and accessibility. -->
+        <div id="start-controls"><button id="start" class="primary wide" disabled><span aria-hidden="true">◉</span> Start with voice</button><button id="start-text" class="text-button wide" disabled>Use text instead</button><p class="permission-note">Your browser will ask to use your microphone.</p></div>
+        <div id="voice-controls" hidden><div id="voice-status" class="voice-status" role="status">Coach is disconnected</div><div class="voice-buttons"><button id="talk" class="primary">Connect voice</button><button id="mute" class="secondary" aria-pressed="false" hidden>Mute mic</button></div></div>
+        <!-- Real conversation text makes spoken feedback available to people who cannot hear it. -->
+        <div id="dialogue" class="dialogue" hidden><div class="conversation-heading"><span>Conversation</span><button id="feedback" class="text-button">Get feedback</button></div><div id="messages" class="messages" role="log" aria-label="Conversation with your coach" aria-live="polite" aria-relevant="additions text"></div><div id="thinking" class="thinking" role="status" hidden>Coach is thinking…</div><form id="ask-form"><label class="sr-only" for="question">Message your coach</label><input id="question" maxlength="1500" placeholder="Share your thinking, or ask for a hint…" autocomplete="off" /><button id="send" aria-label="Send message" title="Send message">↑</button></form></div>
+        <p id="coach-offline" class="small-note" hidden>You can keep editing and checking your code. Reconnect to continue the conversation.</p>
+      </section>
+      <section id="exercise" class="exercise-panel" aria-labelledby="exercise-title" tabindex="-1">
+        <div class="exercise-heading"><div><p class="eyebrow">EXERCISE 01</p><h2 id="exercise-title">The empty-list bug</h2></div><span class="language-tag">Python</span></div>
+        <p class="brief">A support dashboard shows the average customer wait. It works until there are <strong>no customers</strong>. Find the bug and make it return <code>0</code> for an empty list.</p>
+        <p class="prompt"><span aria-hidden="true">↳</span> Before changing anything, explain where you’d look first.</p>
+        <div id="progress" class="progress-line" role="status"><span class="status-mark" aria-hidden="true"></span><span id="progress-copy">Your separate practice computer starts when you do.</span></div>
+        <!-- A native text area stays easy to edit and keyboard-accessible without a full IDE. -->
+        <div class="editor"><div class="editor-bar"><label for="code"><span aria-hidden="true">⌘</span> average.py</label><span id="save-state">Start practice to edit</span></div><textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-describedby="editor-help" aria-label="Python code for average_wait" wrap="off" readonly></textarea><div class="editor-footer"><span id="editor-help">Use spaces to indent. Tab moves to the next control.</span><button id="reset" class="text-button" disabled>Reset code</button></div></div>
+        <!-- These rows are filled from actual execution. Empty rows are explicitly not run yet. -->
+        <div class="checks-heading"><div><h3>Check your change</h3><p id="check-summary">Three small checks. No results yet.</p></div><button id="run" class="primary" disabled><span aria-hidden="true">▷</span> Run checks</button><button id="stop-checks" class="secondary" hidden>Stop checks</button></div>
+        <div id="checks" class="checks" aria-live="polite"></div>
+      </section>
+    </div>
+    <!-- A truthful recap and an explicit end action close the resource lifecycle. -->
+    <section id="recap" class="recap" aria-labelledby="recap-title" hidden><div><p class="eyebrow">YOUR PRACTICE RECAP</p><h2 id="recap-title">Practice complete.</h2><p id="recap-detail"></p><p class="small-note">Keep your code and conversation to review what you explained.</p></div><div class="recap-actions"><a class="primary button-link" href="/api/download">Download recap</a><button id="again" class="secondary">Practice again</button></div></section>
+    <div class="session-footer"><span id="session-note">One exercise. Your own temporary workspace. Start over any time.</span><button id="finish" class="text-button" hidden>Finish practice</button></div>
+    <!-- Optional details explain the providers and data flow without filling the working screen. -->
+    <details class="how"><summary>What’s happening behind the scenes?</summary><div class="how-content"><p><strong>Deepgram is your voice connection.</strong> It listens, speaks, and connects a language model that asks follow-up questions. The coach reads your saved code when you ask about it.</p><p><strong>Render is your practice computer.</strong> Your code runs in a separate temporary workspace, called a sandbox. The same workspace stays open during your exercise and closes when you finish or after ten minutes.</p><p>Audio, conversation, code, and check results are processed by Deepgram and its language-model provider. Your code also runs on Render. This demo holds your code and conversation in server memory for up to an hour, or until the server restarts. Use the sample exercise, not private information.</p><p id="workspace-detail">No practice computer has been created.</p><p class="small-note">An independent integration demo. Three passing checks show this exercise works for those inputs; they are not a hiring assessment.</p></div></details>
   </main>
-  <!-- The module binds controls and streams real voice and calculation events. -->
+  <footer class="site-footer"><span>Think Aloud</span><span>Made for the moment before “let me explain.”</span></footer>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

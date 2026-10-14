@@ -1,49 +1,56 @@
-// Run this explicitly against a locally running or hosted demo. It uses real provider calls.
-// BASE_URL changes the destination; it never changes workspace credentials.
+// Explicit live checks use real provider services and always finish their owned session.
 import assert from "node:assert/strict";
+import { setTimeout as delay } from "node:timers/promises";
 import { WebSocket } from "ws";
 const base = process.env.BASE_URL || "http://localhost:4399";
-const response = await fetch(base + "/api/state");
-assert.equal(response.status, 200);
-const cookie = response.headers.get("set-cookie").split(";")[0];
-const socket = new WebSocket(base.replace(/^http/, "ws") + "/voice", { headers: { Origin: base, Cookie: cookie } });
-let audioBytes = 0, finalState;
-// Collect real streamed steps so a successful answer cannot hide a missing progress update.
-const observedPhases = new Set();
-const timeout = setTimeout(() => { console.error("Live question timed out"); socket.close(); process.exitCode = 1; }, 110000);
-// Both typed and spoken input reach the same Deepgram agent and calculation tool.
-await new Promise((resolve, reject) => {
-  socket.on("message", (data, binary) => {
-    if (binary) { audioBytes += data.length; return; }
-    const event = JSON.parse(data.toString());
-    if (event.type === "state" && event.state.progress) observedPhases.add(event.state.progress.phase);
-    if (event.type === "ready") socket.send(JSON.stringify({ type: "ask", content: "Calculate total revenue by region across all rows. Include a chart. Use the columns Region and Revenue." }));
-    if (event.type === "error") { clearTimeout(timeout); socket.close(); reject(new Error(event.message)); }
-    if (event.type === "state" && event.state.run?.status === "failed") { console.error(JSON.stringify(event.state.run)); clearTimeout(timeout); socket.close(); reject(new Error(event.state.run.error)); }
-    if (event.type === "state" && event.state.run?.status === "succeeded") finalState = event.state;
-    // Wait for a spoken reply after computation, rather than closing as soon as the table arrives.
-    if (event.type === "audio-done" && finalState) { clearTimeout(timeout); socket.close(); resolve(); }
+const first = await fetch(base + "/api/state"), cookie = first.headers.get("set-cookie").split(";")[0];
+let state = await first.json(), socket;
+const headers = { Cookie: cookie, Origin: base, "Content-Type": "application/json" };
+async function api(path, body) { const response = await fetch(base + path, { headers, ...(body === undefined ? {} : { method: "POST", body: JSON.stringify(body) }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error); return data; }
+async function wait(predicate, ms = 100000) { const deadline = Date.now() + ms; do { state = await api("/api/state"); if (predicate(state)) return state; await delay(800); } while (Date.now() < deadline); throw new Error("Timed out: " + state.detail); }
+try {
+  assert.equal(state.phase, "idle"); assert.equal(state.workspace, null);
+  state = await api("/api/start", {}); assert.ok(["preparing", "checking"].includes(state.phase));
+  await wait(s => !s.busy && s.phase === "ready"); assert.equal(state.error, null);
+  const workspaceId = state.workspace.id;
+  assert.equal(state.result.checks.filter(c => c.passed).length, 2);
+  assert.match(state.result.checks.find(c => c.id === "empty").detail, /division by zero/);
+  console.log(JSON.stringify({ baseline: "2/3", workspaceId }));
+  // Correct the real bug, then ensure previous passing checks cannot describe untested edits.
+  const fixed = state.exercise.starter.replace("    total = sum(minutes)", "    # With no customers, the dashboard should show zero minutes.\n    if not minutes:\n        return 0\n    total = sum(minutes)");
+  state = await api("/api/code", { code: fixed, revision: state.revision });
+  assert.notEqual(state.result.revision, state.revision);
+  await api("/api/check", {}); await wait(s => !s.busy && s.result?.revision === s.revision);
+  assert.ok(state.result.checks.every(c => c.passed)); assert.equal(state.workspace.id, workspaceId);
+  console.log(JSON.stringify({ fixed: "3/3", sameWorkspace: true }));
+  // A different visitor and a different site cannot change or download this visitor's practice.
+  const other = await fetch(base + "/api/state"), otherCookie = other.headers.get("set-cookie").split(";")[0];
+  assert.equal((await other.json()).phase, "idle");
+  assert.equal((await fetch(base + "/api/download", { headers: { Cookie: otherCookie } })).status, 404);
+  assert.equal((await fetch(base + "/api/code", { method: "POST", headers: { ...headers, Origin: "https://example.invalid" }, body: JSON.stringify({ code: fixed, revision: state.revision }) })).status, 403);
+  assert.equal((await fetch(base + "/api/code", { method: "POST", headers, body: JSON.stringify({ code: "pass", revision: -1 }) })).status, 409);
+  // Ask the actual Deepgram coach to run checks. Require a new run and returned speech bytes.
+  const before = state.attempts; let bytes = 0, completed = false, reply = "";
+  socket = new WebSocket(base.replace(/^http/, "ws") + "/voice", { headers: { Cookie: cookie, Origin: base } });
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { console.log(JSON.stringify({ diagnostic: { attempts: state.attempts, phase: state.phase, messages: state.messages } })); reject(new Error("Voice tool check timed out")); }, 70000);
+    socket.on("error", error => { clearTimeout(timer); reject(error); });
+    socket.on("message", (data, binary) => {
+      if (binary) { bytes += data.length; return; }
+      const event = JSON.parse(data.toString());
+      if (event.type === "ready") socket.send(JSON.stringify({ type: "ask", content: "I found that an empty list makes count zero, so dividing fails. I added an early return of zero when the list is empty. Please run the checks on my saved code and give me feedback on that explanation." }));
+      if (event.type === "state") { state = event.state; if (state.attempts > before && state.result?.checks.every(c => c.passed)) completed = true; reply = state.messages.filter(m => m.role === "assistant").map(m => m.content).join(" "); }
+      if (event.type === "error") { clearTimeout(timer); reject(new Error(event.message)); }
+      if (event.type === "audio-done" && completed && reply) { clearTimeout(timer); resolve(); }
+    });
   });
-  socket.on("error", reject);
-});
-
-assert.deepEqual([...observedPhases], ["understanding", "preparing", "calculating", "checking", "closing"]);
-assert.equal(finalState.progress.status, "succeeded");
-assert.ok(finalState.progress.steps.every(step => step.status === "done"));
-const rows = finalState.result.rows;
-assert.ok(rows.some(r => r.includes("West") && r.includes(65000)));
-assert.ok(rows.some(r => r.includes("East") && r.includes(56500)));
-assert.equal(finalState.run.cleanup, "terminated");
-assert.ok(audioBytes > 0, "Deepgram must return actual speech audio");
-const file = await fetch(base + "/api/download", { headers: { Cookie: cookie } });
-assert.equal(file.status, 200); assert.match(await file.text(), /65000/);
-// A second browser session cannot access the first visitor's computed file.
-const other = await fetch(base + "/api/state");
-const otherCookie = other.headers.get("set-cookie").split(";")[0];
-assert.equal((await fetch(base + "/api/download", { headers: { Cookie: otherCookie } })).status, 404);
-
-// The chart must answer the requested totals comparison, matching its table categories.
-const chartTotals = new Map(finalState.result.chart.labels.map((label, index) => [label, finalState.result.chart.values[index]]));
-assert.equal(chartTotals.get("West"), 65000);
-assert.equal(chartTotals.get("East"), 56500);
-console.log(JSON.stringify({ passed: true, sandboxId: finalState.result.sandboxId, cleanup: finalState.run.cleanup, rows, audioBytes, observedPhases: [...observedPhases] }));
+  assert.ok(bytes > 0); assert.ok(completed); console.log(JSON.stringify({ deepgramToolRun: true, audioBytes: bytes, coach: reply }));
+  socket.close(); socket = null;
+  // Reloading state preserves the session's file and actual check result.
+  state = await api("/api/state"); assert.equal(state.code, fixed); assert.equal(state.result.revision, state.revision);
+  const file = await fetch(base + "/api/download", { headers }); assert.equal(file.status, 200); assert.match(await file.text(), /3\/3 checks passed/);
+} finally {
+  socket?.close(); await api("/api/end", {}); await wait(s => s.phase === "ended" || s.phase === "error");
+  assert.equal(state.phase, "ended"); assert.equal(state.workspace?.cleanup, "terminated");
+  console.log(JSON.stringify({ cleanup: state.workspace?.cleanup }));
+}
