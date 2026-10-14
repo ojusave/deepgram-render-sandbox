@@ -1,0 +1,94 @@
+<!doctype html>
+<!-- The browser displays results; generated Python runs only in Render Sandboxes. -->
+<html lang="en">
+<head>
+  <!-- Set readable text encoding, mobile sizing, and the browser title. -->
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f8f5"><meta name="color-scheme" content="light">
+  <title>Sidekick | Talk to your data</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <!-- Identity and optional help stay separate from the working area. -->
+  <header class="header">
+    <a class="brand" href="/" aria-label="Sidekick home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>sidekick<span class="brand-caption">Talk to your data</span></a>
+    <details class="help">
+      <summary aria-label="Help">?</summary>
+      <div class="help-content">
+        <strong>A question in. A calculation out.</strong>
+        <p>Ask about the sample, or upload a CSV. Speak naturally or type. Your answer, chart, and downloadable table appear together.</p>
+        <p>Deepgram handles the conversation and writes a small Python program. Render Sandboxes runs it against the complete file. Activity shows the code and execution status.</p>
+        <p>Use sample data. Audio and questions are sent to Deepgram and its language-model provider. File samples enter the agent context; the complete CSV is processed on Render. This demo retains your data in server memory for up to one hour of inactivity. A server restart clears it.</p>
+        <p>CSV only, up to 500 KB and 10,000 rows. Each conversation lasts up to five minutes.</p>
+        <a href="https://github.com/ojusave/deepgram-render-sandbox" target="_blank" rel="noreferrer">View source ↗</a>
+      </div>
+    </details>
+  </header>
+  <main>
+    <!-- One toolbar identifies the active file and offers an optional replacement. -->
+    <section class="workspace" aria-label="Data conversation">
+      <div class="toolbar">
+        <div class="file"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 9h16M10 9v12M4 15h16"/></svg><span id="filename">Monthly sales.csv</span><span id="row-count" class="muted"></span><span id="sample-label" class="sample-label">Sample</span></div>
+        <div class="file-actions"><button id="sample" class="text-button" hidden>Use sample</button><button id="upload" class="quiet-button">Upload CSV <span aria-hidden="true">↑</span></button><input type="file" id="file-input" accept=".csv,text/csv" hidden></div>
+      </div>
+      <div id="error" class="error" role="alert" hidden></div>
+      <!-- The divider is draggable and keyboard-adjustable on wide screens. -->
+      <div id="workbench" class="workbench">
+        <section class="conversation" aria-label="Ask about your data">
+          <div class="conversation-bar"><span>Conversation</span><button id="clear" class="text-button" disabled>Clear</button></div>
+          <div id="conversation-scroll" class="conversation-scroll">
+            <div id="welcome" class="welcome">
+              <span class="eyebrow">A second pair of eyes</span>
+              <h1>What’s in the numbers?</h1>
+              <p>Ask a question. Get a calculated answer.</p>
+              <div id="suggestions" class="suggestions" aria-label="Example questions">
+                <button data-question="Which products explain the revenue drop from August to September?">What drove the revenue drop?<span aria-hidden="true">↗</span></button>
+                <button data-question="Compare total revenue by region and show the difference.">Which region performed better?<span aria-hidden="true">↗</span></button>
+                <button data-question="What was the average revenue per order for each product across both months?">Compare revenue per order<span aria-hidden="true">↗</span></button>
+              </div>
+            </div>
+            <div id="messages" role="log" aria-label="Conversation messages" aria-live="polite"></div>
+          </div>
+          <!-- Voice starts only after a deliberate click. Text remains an equal input option. -->
+          <div class="composer">
+            <div class="voice-row"><button id="talk" class="talk-button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg><span>Talk</span></button><span id="voice-state" class="muted">Or type a question below</span><button id="stop" class="text-button stop" hidden>Stop</button></div>
+            <form id="ask-form">
+              <label class="sr-only" for="question">Ask about your data</label>
+              <textarea id="question" rows="2" maxlength="1000" placeholder="Ask about your data…" disabled></textarea>
+              <button id="ask" type="submit" aria-label="Send question" disabled>↑</button>
+            </form>
+          </div>
+        </section>
+        <div id="divider" class="divider" role="separator" tabindex="0" aria-label="Resize conversation" aria-orientation="vertical" aria-valuemin="30" aria-valuemax="65" aria-valuenow="42"></div>
+        <section class="inspector" aria-label="Data and answers">
+          <!-- Tabs hide detail until it is useful without making it disappear. -->
+          <div class="panel-bar">
+            <div role="tablist" aria-label="Workspace views">
+              <button id="tab-data" role="tab" aria-selected="true" aria-controls="panel-data">Data</button>
+              <button id="tab-result" role="tab" aria-selected="false" aria-controls="panel-result" tabindex="-1">Answer</button>
+              <button id="tab-activity" role="tab" aria-selected="false" aria-controls="panel-activity" tabindex="-1">Activity<span id="activity-dot" aria-hidden="true"></span></button>
+            </div>
+            <a id="download" class="text-button" href="/api/download" download hidden>Download CSV ↓</a>
+          </div>
+          <div id="panel-data" role="tabpanel" aria-labelledby="tab-data" tabindex="0">
+            <div class="table-wrap" id="data-table"></div><p id="preview-note" class="panel-note"></p>
+          </div>
+          <div id="panel-result" role="tabpanel" aria-labelledby="tab-result" tabindex="0" hidden>
+            <div id="result-empty" class="empty"><span aria-hidden="true">↗</span><p>Your answer will appear here.</p><small>Ask by voice or type a question.</small></div>
+            <div id="result-content" hidden><p class="eyebrow" id="result-provenance">Calculated from your data</p><h2 id="result-title"></h2><p id="result-summary"></p><div id="chart" aria-label="Result chart"></div><div class="table-wrap" id="result-table"></div></div>
+          </div>
+          <div id="panel-activity" role="tabpanel" aria-labelledby="tab-activity" tabindex="0" hidden>
+            <div id="activity-empty" class="empty"><span aria-hidden="true">⌘</span><p>No calculations yet.</p><small>Code and execution details appear after a question.</small></div>
+            <div id="activity-content" hidden><h2 id="activity-title"></h2><dl id="run-details"></dl><details><summary>Python calculation</summary><pre id="code"></pre></details><pre id="stderr" hidden></pre></div>
+          </div>
+        </section>
+      </div>
+      <!-- Status reports actual work and stays visible regardless of the selected tab. -->
+      <div class="statusbar" role="status"><span id="status-dot" class="status-dot"></span><span id="status">Loading data…</span><span id="duration"></span><span class="session-note">This session only</span></div>
+    </section>
+    <footer><span>Deepgram <span class="multiply">×</span> Render Sandboxes</span><span>Community prototype · Sample data recommended</span></footer>
+  </main>
+  <!-- The module binds controls and streams real voice and calculation events. -->
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

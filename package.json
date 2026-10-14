@@ -1,0 +1,30 @@
+{
+  "name": "deepgram-render-sandbox",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env server/index.js",
+    "build": "vite build",
+    "start": "node --env-file-if-exists=.env server/index.js",
+    "test": "node --test tests/*.test.js",
+    "test:live": "node --env-file-if-exists=.env scripts/live-test.js"
+  },
+  "dependencies": {
+    "@deepgram/agents": "0.1.2",
+    "@renderinc/sdk": "1.2.0",
+    "express": "5.3.0",
+    "express-session": "^1.18.2",
+    "ws": "8.22.0",
+    "csv-parse": "7.0.3",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "vite": "8.3.4",
+    "@playwright/test": "1.64.0"
+  }
+}
