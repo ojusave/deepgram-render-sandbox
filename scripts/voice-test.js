@@ -42,4 +42,9 @@ assert.match(heard, /region/i); assert.ok(audioBytes > 0);
 assert.equal(finalState.run.cleanup, "terminated");
 const numeric = JSON.stringify(finalState.result);
 assert.match(numeric, /65000/); assert.match(numeric, /56500/);
+
+// The chart must answer the requested totals comparison, matching its table categories.
+const chartTotals = new Map(finalState.result.chart.labels.map((label, index) => [label, finalState.result.chart.values[index]]));
+assert.equal(chartTotals.get("West"), 65000);
+assert.equal(chartTotals.get("East"), 56500);
 console.log(JSON.stringify({ passed: true, heard, audioBytes, result: finalState.result, cleanup: finalState.run.cleanup }));

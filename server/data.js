@@ -46,6 +46,16 @@ export const resultSchema = z.object({
   // A table must stay rectangular; chart labels must correspond to actual numeric values.
   if (value.rows.some(r => r.length !== value.columns.length)) ctx.addIssue({ code: "custom", message: "Uneven result table" });
   if (value.chart && value.chart.labels.length !== value.chart.values.length) ctx.addIssue({ code: "custom", message: "Uneven chart" });
+  // A chart is another view of the table, so every bar must reuse one label/value pair.
+  // For example, West / 65000 cannot become West / 8500 while the table still shows totals.
+  // Try each pair of columns, then require all bars to match that same pair.
+  if (value.chart) {
+    const matchesTable = value.columns.some((_, labelColumn) =>
+      value.columns.some((_, numberColumn) => labelColumn !== numberColumn &&
+        value.chart.labels.every((label, index) => value.rows.some(row =>
+          String(row[labelColumn]) === label && row[numberColumn] === value.chart.values[index]))));
+    if (!matchesTable) ctx.addIssue({ code: "custom", message: "Chart labels and values must match the same two columns in the result table" });
+  }
 });
 
 // Quote each export cell, and neutralize spreadsheet formulas supplied through uploaded data.

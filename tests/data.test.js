@@ -26,3 +26,14 @@ test("the voice tool waits for the completed turn and uses the full uploaded fil
   assert.match(settings.agent.think.prompt, /COMPLETE CSV/);
   assert.equal(settings.audio.input.sample_rate, 16000);
 });
+
+// This reproduces a hosted response whose table showed totals but whose bars showed differences.
+// Accept either metric when it appears in the table; reject a chart that silently changes it.
+test("chart bars must match a consistent metric in the result table", () => {
+  const totals = { title: "Revenue", summary: "West leads", columns: ["Region", "Revenue"], rows: [["West", 65000], ["East", 56500]] };
+  const chart = { label: "Revenue", labels: ["West", "East"], values: [65000, 56500] };
+  assert.ok(resultSchema.safeParse({ ...totals, chart }).success);
+  assert.equal(resultSchema.safeParse({ ...totals, chart: { ...chart, values: [8500, -8500] } }).success, false);
+  const changes = { ...totals, columns: ["Product", "August", "September", "Change"], rows: [["Lamp", 28000, 17000, -11000], ["Tote", 22000, 21000, -1000]] };
+  assert.ok(resultSchema.safeParse({ ...changes, chart: { label: "Change", labels: ["Lamp", "Tote"], values: [-11000, -1000] } }).success);
+});

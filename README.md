@@ -112,7 +112,7 @@ The typed check validates expected totals, actual returned speech bytes, downloa
 - A signed browser cookie separates visitors. Uploads, conversation text, generated code, and results are held in server memory for up to one hour of inactivity. A restart clears them. No durable database is configured.
 - Audio and questions are processed by Deepgram and its managed language-model provider. Column names and five example rows enter the agent context. The full CSV and generated program go to Render Sandboxes. The collected result returns to the app and Deepgram. Use sample data.
 
-The result validator checks structure, not the mathematical meaning of arbitrary generated programs. Review the answer and code before relying on them. Unknown creation outcomes or unconfirmed cleanup block additional calculations on that server rather than automatically creating another sandbox.
+The result validator checks structure and ensures chart bars match table values. It does not verify the mathematical meaning of arbitrary generated programs. Review the answer and code before relying on them. Unknown creation outcomes or unconfirmed cleanup block additional calculations on that server rather than automatically creating another sandbox.
 
 ## References
 

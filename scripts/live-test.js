@@ -35,4 +35,9 @@ assert.equal(file.status, 200); assert.match(await file.text(), /65000/);
 const other = await fetch(base + "/api/state");
 const otherCookie = other.headers.get("set-cookie").split(";")[0];
 assert.equal((await fetch(base + "/api/download", { headers: { Cookie: otherCookie } })).status, 404);
+
+// The chart must answer the requested totals comparison, matching its table categories.
+const chartTotals = new Map(finalState.result.chart.labels.map((label, index) => [label, finalState.result.chart.values[index]]));
+assert.equal(chartTotals.get("West"), 65000);
+assert.equal(chartTotals.get("East"), 56500);
 console.log(JSON.stringify({ passed: true, sandboxId: finalState.result.sandboxId, cleanup: finalState.run.cleanup, rows, audioBytes }));
