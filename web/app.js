@@ -1,9 +1,11 @@
 // Deepgram's browser helpers capture microphone audio and play spoken replies.
 import { AgentMicrophone, AgentPlayer } from "@deepgram/agents";
+// Plain-language descriptions are shared with the server that records the real steps.
+import { phases, beginProgress, finishProgress, progressCopy } from "./progress.js";
 // Keep page references in one place; no untrusted text is inserted as HTML.
 const $ = id => document.getElementById(id);
 let state, socket, connecting, microphone, player, talking = false, pending = false, currentResult, voiceLabel = "";
-let ready = false, lastMessages = "", pollTimer;
+let ready = false, lastMessages = "", pollTimer, progressTimer, localProgress, previousProgressId, shownProgressKey = "";
 const tabs = [...document.querySelectorAll('[role="tab"]')];
 // Create DOM nodes using textContent, so uploaded cells cannot become scripts.
 function element(tag, text, className) { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; }
@@ -61,33 +63,77 @@ function render(next) {
     $("result-content").hidden = false; $("result-empty").hidden = true; $("download").hidden = false;
     tab("tab-result");
   } else if (!state.result) { currentResult = null; $("result-content").hidden = true; $("result-empty").hidden = false; $("download").hidden = true; }
-  $("activity-empty").hidden = !!state.run; $("activity-content").hidden = !state.run;
-  if (state.run) {
-    const run = state.run;
-    $("activity-title").textContent = run.stage;
+  // A new server history replaces the immediate click feedback. Old answers remain clearly labeled.
+  if (localProgress && state.progress?.id !== previousProgressId && state.progress) localProgress = null;
+  const run = currentRun();
+  if (currentProgress()?.status !== "running") pending = false;
+  if (run?.error) error(run.error);
+
+  controls();
+}
+// Ignore a previous question's execution when showing progress for the current question.
+function currentProgress() { return localProgress || state?.progress; }
+function currentRun() { return state?.run?.progressId === currentProgress()?.id ? state.run : null; }
+function renderProgress() {
+  const progress = currentProgress();
+  $("progress").hidden = !progress;
+  document.querySelector(".workspace").classList.toggle("has-progress", !!progress);
+  $("activity-empty").hidden = !!progress; $("activity-content").hidden = !progress;
+  if (!progress) return;
+  const copy = localProgress && connecting ? { title: "Connecting your question", detail: "Opening the conversation with Deepgram. Your file is ready." } : progressCopy(progress, state.dataset.count);
+  $("progress-title").textContent = copy.title; $("progress-detail").textContent = copy.detail;
+  $("progress").dataset.status = progress.status;
+  $("progress-marker").textContent = progress.status === "running" ? "◌" : ["succeeded", "replied"].includes(progress.status) ? "✓" : "!";
+  // Update the live announcement only when the meaning changes, never for every elapsed second.
+  const key = progress.id + copy.title + copy.detail + JSON.stringify(progress.steps);
+  if (key !== shownProgressKey) {
+    shownProgressKey = key;
+    $("progress-announcement").textContent = copy.title + ". " + copy.detail;
+    const statusWords = { waiting: progress.status === "running" ? "Up next" : "Not run", active: "In progress", done: "Done", failed: "Couldn't finish", cancelled: "Stopped" };
+    $("progress-steps").replaceChildren(...phases.map((phase, index) => {
+      const step = progress.steps[index], node = element("li", undefined, step.status);
+      const mark = element("span", step.status === "done" ? "✓" : String(index + 1), "step-number"); mark.setAttribute("aria-hidden", "true");
+      node.append(mark, element("span", phase.label), element("span", ": " + statusWords[step.status], "sr-only"));
+      if (step.status === "active") node.setAttribute("aria-current", "step");
+      return node;
+    }));
+    $("activity-history").replaceChildren(...phases.map((phase, index) => {
+      const step = progress.steps[index], item = element("li", undefined, step.status);
+      item.append(element("strong", phase.title), element("span", statusWords[step.status], "step-state"), element("p", phase.detail));
+      if (step.startedAt) item.append(element("time", "Started " + new Date(step.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })));
+      return item;
+    }));
+  }
+  // The elapsed clock shows real time spent, not an invented completion percentage.
+  const elapsed = Math.max(0, Math.floor(((progress.endedAt || Date.now()) - progress.startedAt) / 1000));
+  $("progress-elapsed").textContent = elapsed < 60 ? `${elapsed}s` : `${Math.floor(elapsed / 60)}m ${elapsed % 60}s`;
+  const run = currentRun();
+  $("technical-details").hidden = !run;
+  if (run) {
     $("code").textContent = run.code || "";
     $("stderr").textContent = run.stderr || run.error || ""; $("stderr").hidden = !$("stderr").textContent;
-    const fields = [["Status", run.stage], ["Network", "Blocked for generated code"], ["Sandbox", run.sandboxId || "Not created"], ["Cleanup", run.cleanup === "terminated" ? "Sandbox stopped and confirmed" : run.cleanup === "unconfirmed" ? "Not yet confirmed" : "No sandbox created"]];
-    $("run-details").replaceChildren(...fields.flatMap(([key, value]) => [element("dt", key), element("dd", value)]));
-    if (run.status !== "running") pending = false;
-    if (run.error) error(run.error);
+    const fields = [["Step", run.stage], ["Internet access", "Blocked for the calculation"], ["Workspace ID", run.sandboxId || "Not created"], ["Workspace closed", run.cleanup === "terminated" ? "Confirmed" : run.cleanup === "unconfirmed" ? "Not yet confirmed" : "Not created"]];
+    $("run-details").replaceChildren(...fields.flatMap(([name, value]) => [element("dt", name), element("dd", value)]));
   }
-  controls();
 }
 function controls() {
   if (!state) return;
-  const running = state.run?.status === "running", working = pending || running;
+  const progress = currentProgress(), running = currentRun()?.status === "running", working = pending || running || progress?.status === "running";
   $("question").disabled = working; $("ask").disabled = working || !$("question").value.trim();
   $("talk").disabled = !!connecting || !state.voiceAvailable; $("talk").classList.toggle("active", talking); $("talk").querySelector("span").textContent = talking ? "End voice" : "Talk";
   $("talk").setAttribute("aria-pressed", String(talking));
-  $("stop").hidden = !working; $("clear").disabled = working || !state.messages.length;
+  $("stop").hidden = !working; $("stop").disabled = !!progress?.stopping;
+  $("clear").disabled = working || !state.messages.length;
   $("upload").disabled = working; $("sample").disabled = working;
   for (const button of document.querySelectorAll("[data-question]")) button.disabled = working;
-  $("activity-dot").classList.toggle("active", running);
+  $("activity-dot").classList.toggle("active", working);
   $("status-dot").classList.toggle("busy", working || !!connecting);
   $("voice-state").textContent = talking ? (voiceLabel || "Listening") : connecting ? "Connecting…" : "Or type a question below";
-  $("status").textContent = running ? state.run.stage : connecting ? "Connecting to Deepgram…" : pending ? "Thinking…" : state.run?.status === "succeeded" ? "Answer ready" : state.run?.status === "cancelled" ? "Stopped" : state.run?.status === "failed" ? "Calculation failed" : talking ? "Listening" : "Ready";
-  $("duration").textContent = state.run?.durationMs ? "· " + (state.run.durationMs / 1000).toFixed(1) + "s" : "";
+  $("status").textContent = progress ? progressCopy(progress, state.dataset.count).title : connecting ? "Connecting…" : talking ? "Listening" : "Ready";
+  // Keep an earlier answer explicitly labeled after a cancelled or failed follow-up as well.
+  const previousAnswer = state.result && progress && (working || currentRun()?.sandboxId !== state.result.sandboxId);
+  $("result-provenance").textContent = previousAnswer ? working ? "Previous answer · New question in progress" : "Previous answer · No new result" : "Calculated from your data";
+  renderProgress();
 }
 // Ordinary requests carry the signed session cookie automatically.
 async function request(path, body) {
@@ -107,7 +153,7 @@ async function connect() {
       let msg; try { msg = JSON.parse(event.data); } catch { return; }
       if (msg.type === "ready") { clearTimeout(timeout); ready = true; resolve(); }
       if (msg.type === "state") render(msg.state);
-      if (msg.type === "error") { error(msg.message); pending = false; reject(new Error(msg.message)); }
+      if (msg.type === "error") { error(msg.message); if (localProgress) finishProgress(localProgress, "failed"); pending = false; reject(new Error(msg.message)); }
       if (msg.type === "ended") { voiceLabel = msg.reason; pending = false; }
       if (msg.type === "interrupt") { player?.interrupt(); voiceLabel = "Listening"; }
       if (msg.type === "thinking") voiceLabel = "Thinking…";
@@ -126,9 +172,12 @@ async function connect() {
 }
 async function ask(content) {
   if (!content.trim()) return;
-  error(); pending = true; controls();
+  error(); pending = true; previousProgressId = state.progress?.id;
+  localProgress = beginProgress("connecting"); controls();
+  // On a small screen, keep the live step and Stop button in view after sending the question.
+  if (window.matchMedia("(max-width: 640px)").matches) $("progress").scrollIntoView({ block: "nearest" });
   try { await connect(); socket.send(JSON.stringify({ type: "ask", content })); $("question").value = ""; }
-  catch (err) { pending = false; error(err.message); }
+  catch (err) { pending = false; if (localProgress?.status !== "cancelled") { if (localProgress) finishProgress(localProgress, "failed"); error(err.message); } }
   controls();
 }
 $("ask-form").onsubmit = event => { event.preventDefault(); void ask($("question").value.trim()); };
@@ -153,6 +202,9 @@ $("talk").onclick = async () => {
   controls();
 };
 function stop() {
+  const progress = currentProgress();
+  if (localProgress) finishProgress(localProgress, "cancelled", "not-created");
+  else if (progress?.status === "running") progress.stopping = true;
   microphone?.stop(); player?.dispose(); talking = false; pending = false;
   if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "stop" }));
   const oldSocket = socket; socket = null; ready = false; oldSocket?.close(); controls(); void refresh();
@@ -163,12 +215,12 @@ $("upload").onclick = () => $("file-input").click();
 $("file-input").onchange = async event => {
   const file = event.target.files[0]; if (!file) return;
   error();
-  try { if (file.size > 512000) throw new Error("Choose a CSV smaller than 500 KB."); render(await request("/api/data", { name: file.name, csv: await file.text() })); tab("tab-data"); }
+  try { if (file.size > 512000) throw new Error("Choose a CSV smaller than 500 KB."); const next = await request("/api/data", { name: file.name, csv: await file.text() }); localProgress = null; render(next); tab("tab-data"); }
   catch (err) { error(err.message); }
   event.target.value = "";
 };
-$("sample").onclick = async () => { try { error(); render(await request("/api/data", { sample: true })); tab("tab-data"); } catch (err) { error(err.message); } };
-$("clear").onclick = async () => { stop(); try { error(); render(await request("/api/clear", {})); tab("tab-data"); } catch (err) { error(err.message); } };
+$("sample").onclick = async () => { try { error(); const next = await request("/api/data", { sample: true }); localProgress = null; render(next); tab("tab-data"); } catch (err) { error(err.message); } };
+$("clear").onclick = async () => { stop(); try { error(); localProgress = null; render(await request("/api/clear", {})); tab("tab-data"); } catch (err) { error(err.message); } };
 // Save only a visual preference in browser storage, never the uploaded data.
 const divider = $("divider"), bench = $("workbench");
 function resize(value) { value = Math.max(30, Math.min(65, value)); bench.style.setProperty("--left", value + "%"); divider.setAttribute("aria-valuenow", String(Math.round(value))); try { localStorage.setItem("sidekick.split", String(value)); } catch {} }
@@ -179,5 +231,7 @@ divider.onkeydown = event => { const value = Number(divider.getAttribute("aria-v
 // Refresh recovers completed results after a page reload and observes cleanup after Stop.
 async function refresh() { try { render(await request("/api/state")); } catch (err) { error(err.message); } }
 await refresh();
-pollTimer = setInterval(() => { if (!socket && state?.run?.status === "running") void refresh(); }, 1200);
-window.addEventListener("pagehide", () => { clearInterval(pollTimer); microphone?.stop(); player?.dispose(); socket?.close(); });
+pollTimer = setInterval(() => { if (!socket && (state?.run?.status === "running" || state?.progress?.status === "running")) void refresh(); }, 1200);
+// Refresh only the elapsed label once a second. Real server events still control every step.
+progressTimer = setInterval(() => { if (currentProgress()?.status === "running") renderProgress(); }, 1000);
+window.addEventListener("pagehide", () => { clearInterval(pollTimer); clearInterval(progressTimer); microphone?.stop(); player?.dispose(); socket?.close(); });

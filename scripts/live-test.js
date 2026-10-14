@@ -8,12 +8,15 @@ assert.equal(response.status, 200);
 const cookie = response.headers.get("set-cookie").split(";")[0];
 const socket = new WebSocket(base.replace(/^http/, "ws") + "/voice", { headers: { Origin: base, Cookie: cookie } });
 let audioBytes = 0, finalState;
+// Collect real streamed steps so a successful answer cannot hide a missing progress update.
+const observedPhases = new Set();
 const timeout = setTimeout(() => { console.error("Live question timed out"); socket.close(); process.exitCode = 1; }, 110000);
 // Both typed and spoken input reach the same Deepgram agent and calculation tool.
 await new Promise((resolve, reject) => {
   socket.on("message", (data, binary) => {
     if (binary) { audioBytes += data.length; return; }
     const event = JSON.parse(data.toString());
+    if (event.type === "state" && event.state.progress) observedPhases.add(event.state.progress.phase);
     if (event.type === "ready") socket.send(JSON.stringify({ type: "ask", content: "Calculate total revenue by region across all rows. Include a chart. Use the columns Region and Revenue." }));
     if (event.type === "error") { clearTimeout(timeout); socket.close(); reject(new Error(event.message)); }
     if (event.type === "state" && event.state.run?.status === "failed") { console.error(JSON.stringify(event.state.run)); clearTimeout(timeout); socket.close(); reject(new Error(event.state.run.error)); }
@@ -24,6 +27,9 @@ await new Promise((resolve, reject) => {
   socket.on("error", reject);
 });
 
+assert.deepEqual([...observedPhases], ["understanding", "preparing", "calculating", "checking", "closing"]);
+assert.equal(finalState.progress.status, "succeeded");
+assert.ok(finalState.progress.steps.every(step => step.status === "done"));
 const rows = finalState.result.rows;
 assert.ok(rows.some(r => r.includes("West") && r.includes(65000)));
 assert.ok(rows.some(r => r.includes("East") && r.includes(56500)));
@@ -40,4 +46,4 @@ assert.equal((await fetch(base + "/api/download", { headers: { Cookie: otherCook
 const chartTotals = new Map(finalState.result.chart.labels.map((label, index) => [label, finalState.result.chart.values[index]]));
 assert.equal(chartTotals.get("West"), 65000);
 assert.equal(chartTotals.get("East"), 56500);
-console.log(JSON.stringify({ passed: true, sandboxId: finalState.result.sandboxId, cleanup: finalState.run.cleanup, rows, audioBytes }));
+console.log(JSON.stringify({ passed: true, sandboxId: finalState.result.sandboxId, cleanup: finalState.run.cleanup, rows, audioBytes, observedPhases: [...observedPhases] }));

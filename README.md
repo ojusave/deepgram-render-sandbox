@@ -40,6 +40,8 @@ npm start
 
 Open [localhost:4399](http://localhost:4399). Choose **Which region performed better?** The fictional sample totals are **West: $65,000** and **East: $56,500**. Open **Activity** to see the generated Python and confirmed sandbox cleanup.
 
+After you ask, the progress strip explains each real step: understanding the question, preparing a temporary workspace, calculating, checking the output, and closing the workspace. The elapsed clock measures time spent; it does not estimate a completion percentage. **Activity** explains the steps and keeps code under **Technical details**. A sandbox is the temporary, separate computer workspace Render uses for the calculation.
+
 Choose **Talk** to allow microphone access. **End voice** releases the microphone. **Stop** ends the connection and stops any active calculation. You can always type instead.
 
 ## How it works

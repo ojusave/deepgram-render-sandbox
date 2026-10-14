@@ -20,7 +20,8 @@ function fake(options = {}) {
   };
 }
 test("success collects validated output and confirms cleanup", async () => {
-  const api = fake(); const output = await createRunner(api).run({ code: "pass", csv: "n\n3", signal: new AbortController().signal });
+  const api = fake(), phases = []; const output = await createRunner(api).run({ code: "pass", csv: "n\n3", signal: new AbortController().signal, report: patch => { if (patch.phase) phases.push(patch.phase); } });
+  assert.deepEqual(phases, ["preparing", "calculating", "checking", "closing"]);
   assert.equal(output.rows[0][0], 3); assert.equal(output.cleanup, "terminated");
   assert.equal(api.calls[0][1].timeoutSeconds, 180);
   assert.equal(api.calls[0][1].networkPolicy.default, "deny-all");

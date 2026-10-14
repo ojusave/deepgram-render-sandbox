@@ -8,6 +8,8 @@ import { WebSocket, WebSocketServer } from "ws";
 import { readDataset, preview, sampleCsv, toCsv } from "./data.js";
 import { agentSettings } from "./settings.js";
 import { createRunner } from "./sandbox.js";
+// Keep the visible progress tied to real server events, including cancellation and cleanup.
+import { beginProgress, advanceProgress, finishProgress } from "../web/progress.js";
 
 // These limits bound a shared, single-instance demo. No credentials enter a sandbox.
 const PORT = Number(process.env.PORT || 4399);
@@ -35,7 +37,7 @@ app.get("/healthz", (_req, res) => res.json({ ok: true }));
 
 // Return a safe view. CSV contents stay server-side except for the preview the user can inspect.
 function view(record) {
-  return { dataset: preview(record.dataset), messages: record.messages, run: record.run, result: record.result, connected: !!record.socket, voiceAvailable: !!process.env.DEEPGRAM_API_KEY };
+  return { dataset: preview(record.dataset), messages: record.messages, run: record.run, result: record.result, progress: record.progress, connected: !!record.socket, voiceAvailable: !!process.env.DEEPGRAM_API_KEY };
 }
 function publish(record) {
   if (record.socket?.readyState === WebSocket.OPEN) record.socket.send(JSON.stringify({ type: "state", state: view(record) }));
@@ -43,6 +45,8 @@ function publish(record) {
 function message(record, role, content) {
   // Deepgram can repeat a typed turn as a transcript; keep one visible copy.
   if (record.messages.at(-1)?.role === role && record.messages.at(-1)?.content === content) return;
+  // Each actual user question starts a new progress history, even when an old answer remains visible.
+  if (role === "user") record.progress = beginProgress(randomUUID());
   // Deepgram streams a reply in sentence chunks. Present them as one continuous response.
   if (role === "assistant" && record.messages.at(-1)?.role === "assistant") record.messages.at(-1).content = (record.messages.at(-1).content + " " + content).slice(0, 5000);
   else record.messages.push({ id: randomUUID(), role, content: String(content).slice(0, 5000) });
@@ -56,7 +60,7 @@ app.get("/api/state", (req, res) => {
   if (!record) {
     if (records.size >= 150) return res.status(503).json({ error: "The demo is busy. Please try again later." });
     req.session.started = true;
-    record = { dataset: readDataset(sampleCsv, "Monthly sales.csv"), messages: [], run: null, result: null, touched: Date.now(), socket: null };
+    record = { dataset: readDataset(sampleCsv, "Monthly sales.csv"), messages: [], run: null, result: null, progress: null, touched: Date.now(), socket: null };
     records.set(req.sessionID, record);
   }
   record.touched = Date.now();
@@ -76,7 +80,7 @@ app.post("/api/data", (req, res) => {
     const dataset = readDataset(req.body.sample ? sampleCsv : req.body.csv, req.body.sample ? "Monthly sales.csv" : req.body.name);
     record.stop?.();
     record.dataset = dataset;
-    record.messages = []; record.run = null; record.result = null;
+    record.messages = []; record.run = null; record.result = null; record.progress = null;
     res.json(view(record));
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
@@ -91,7 +95,7 @@ app.post("/api/clear", (req, res) => {
   const record = getRecord(req);
   record.stop?.();
   if (record.run?.status === "running") return res.status(409).json({ error: "The calculation is stopping. Clear again when it finishes." });
-  record.messages = []; record.run = null; record.result = null;
+  record.messages = []; record.run = null; record.result = null; record.progress = null;
   res.json(view(record));
 });
 // Browser files are generated with npm run build, then served from one Render service.
@@ -124,13 +128,21 @@ function connectVoice(client, record) {
   // Helpers only forward application messages or allowed protocol events.
   const send = event => { if (client.readyState === WebSocket.OPEN) client.send(JSON.stringify(event)); };
   const provider = event => { if (upstream.readyState === WebSocket.OPEN) upstream.send(JSON.stringify(event)); };
-  const fail = text => send({ type: "error", message: text });
+  const fail = text => {
+    // A failed connection or reply must stop the visible waiting state as well as show an error.
+    if (!activeCall) { finishProgress(record.progress, "failed", "not-created"); publish(record); }
+    send({ type: "error", message: text });
+  };
   let idleTimer;
   const touch = () => { clearTimeout(idleTimer); idleTimer = setTimeout(() => { send({ type: "ended", reason: "Conversation paused. Ask another question to reconnect." }); finish(); }, 90000); };
   // Ending the call releases the microphone in the browser and stops any owned calculation.
   function finish() {
     if (closed) return;
     closed = true; clearTimeout(idleTimer); clearTimeout(maxTimer); clearInterval(keepAlive); clearInterval(byteWindow);
+    if (record.progress?.status === "running") {
+      if (activeCall) record.progress.stopping = true;
+      else finishProgress(record.progress, "cancelled", "not-created");
+    }
     activeCall?.controller.abort(new Error("Calculation stopped."));
     upstream.close(); client.close(); connections--;
     if (record.socket === client) { record.socket = null; record.stop = null; }
@@ -151,7 +163,11 @@ function connectVoice(client, record) {
     if (event.type === "UserStartedSpeaking") { touch(); send({ type: "interrupt" }); }
     if (event.type === "AgentThinking") send({ type: "thinking" });
     if (event.type === "AgentStartedSpeaking") send({ type: "speaking" });
-    if (event.type === "AgentAudioDone") send({ type: "audio-done" });
+    if (event.type === "AgentAudioDone") {
+      // A conversational reply can finish without a calculation. Do not mark unused steps complete.
+      if (!activeCall && record.progress?.status === "running" && record.progress.phase === "understanding") { finishProgress(record.progress, "replied", "not-created"); publish(record); }
+      send({ type: "audio-done" });
+    }
     if (event.type === "InjectionRefused") { fail("The agent is still finishing. Try your question again in a moment."); send({ type: "turn-done" }); }
     if (event.type === "Error") {
       // Log the provider's error code only, never credentials or uploaded values.
@@ -177,11 +193,19 @@ function connectVoice(client, record) {
     try { code = JSON.parse(fn.arguments ?? fn.input).code; if (typeof code !== "string") throw new Error(); }
     catch { respond({ error: "The calculation code was missing." }); return; }
     const controller = new AbortController();
+    // Hold this question's progress object so late events cannot change a newer question's history.
+    const progress = record.progress || (record.progress = beginProgress(randomUUID()));
     activeCall = { id: fn.id, controller }; calculations++;
-    record.run = { id: fn.id, status: "running", stage: "Preparing calculation", code, startedAt: Date.now(), cleanup: "not-created" };
+    record.run = { id: fn.id, progressId: progress.id, status: "running", stage: "Preparing calculation", code, startedAt: Date.now(), cleanup: "not-created" };
     publish(record);
     try {
-      const result = await runner.run({ code, csv: record.dataset.csv, signal: controller.signal, report: patch => { Object.assign(record.run, patch); publish(record); } });
+      const result = await runner.run({ code, csv: record.dataset.csv, signal: controller.signal, report: patch => {
+        Object.assign(record.run, patch);
+        if (patch.phase) advanceProgress(progress, patch.phase, patch.interruption);
+        if (patch.phase === "closing") progress.cleanup = "unconfirmed";
+        if (patch.cleanup) progress.cleanup = patch.cleanup;
+        publish(record);
+      } });
       // A result from an interrupted question must never replace the current answer.
       if (closed || cancelled.has(fn.id) || controller.signal.aborted) return;
       record.result = result;
@@ -195,6 +219,7 @@ function connectVoice(client, record) {
     } finally {
       // If cancellation arrived after execution but before publication, preserve a truthful stopped state.
       if (record.run.status === "running") { record.run.status = "cancelled"; record.run.stage = "Stopped"; }
+      finishProgress(progress, record.run.status, record.run.cleanup);
       calculations--; activeCall = null; publish(record); if (!closed) touch();
     }
   }

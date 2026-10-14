@@ -43,13 +43,13 @@ export function createRunner(api = new Render().experimental.sandboxes) {
     const check = () => signal?.throwIfAborted();
     try {
       check();
-      report({ stage: "Preparing calculation", code });
+      report({ stage: "Preparing calculation", phase: "preparing", code });
       const pending = api.create({ timeoutSeconds: 180, networkPolicy: { default: "deny-all" } });
       // If the provider answers after our deadline, retain ownership and stop that late resource.
       pending.then(sandbox => { if (expired) { active.set(sandbox.id, true); void terminateAndConfirm(api, sandbox.id).then(() => { active.delete(sandbox.id); uncertain = false; }).catch(() => {}); } }).catch(() => {});
       let sandbox;
       try { sandbox = await bounded(pending, 30000); }
-      catch (error) { expired = true; uncertain = true; throw new Error("Sandbox creation could not be confirmed. Please try later."); }
+      catch (error) { expired = true; uncertain = true; cleanup = "unconfirmed"; throw new Error("Sandbox creation could not be confirmed. Please try later."); }
       id = sandbox.id; active.set(id, true); cleanup = "unconfirmed";
       report({ stage: "Starting isolated calculation", sandboxId: id, cleanup: "unconfirmed" });
       const readyDeadline = Date.now() + 45000;
@@ -66,7 +66,7 @@ export function createRunner(api = new Render().experimental.sandboxes) {
       check();
       await bounded(api.upload(id, "/tmp/data.csv", csv));
       await bounded(api.upload(id, "/tmp/program.py", code));
-      report({ stage: "Calculating", sandboxId: id });
+      report({ stage: "Calculating", phase: "calculating", sandboxId: id });
       let stdout = "", stderr = "", exitCode = null;
       const execSignal = AbortSignal.any([signal ?? new AbortController().signal, AbortSignal.timeout(30000)]);
       for await (const event of await api.exec(id, "ulimit -f 2048; timeout --signal=TERM --kill-after=2s 20s python3 -I /tmp/program.py", undefined, execSignal)) {
@@ -80,6 +80,7 @@ export function createRunner(api = new Render().experimental.sandboxes) {
         report({ stderr: stderr.slice(-3000), exitCode });
         throw new Error(exitCode === 124 ? "The calculation reached its time limit." : "The generated calculation failed. Try rephrasing the question.");
       }
+      report({ stage: "Checking output", phase: "checking" });
       // Bound the returned file before downloading it, even when the generated program misbehaves.
       let collectExit = null;
       for await (const event of await api.exec(id, "test -f /tmp/result.json && head -c 65537 /tmp/result.json > /tmp/collected.json", undefined, execSignal)) {
@@ -92,7 +93,7 @@ export function createRunner(api = new Render().experimental.sandboxes) {
       catch { throw new Error("The calculation returned an invalid result. Try rephrasing the question."); }
     } finally {
       if (id) {
-        report({ stage: "Finishing", sandboxId: id });
+        report({ stage: "Finishing", phase: "closing", interruption: signal?.aborted ? "cancelled" : !output ? "failed" : undefined, sandboxId: id });
         try { await terminateAndConfirm(api, id); active.delete(id); cleanup = "terminated"; }
         catch (error) { uncertain = true; throw error; }
       }
