@@ -89,9 +89,9 @@ function controls() {
   // Keep the outcome concise; the individual inputs and errors are available in Details.
   $("check-details").hidden = !state.result && !state.partial?.length;
   $("check-details").dataset.passed = String(current && passed === 3);
-  $("check-summary").textContent = checking ? "Checking your change…" : current ? passed === 3 ? "All 3 checks passed." : `${passed} of 3 passed. ${3 - passed === 1 ? "One needs" : "Some need"} a fix.` : "Code changed. Run checks again.";
-  $("progress-copy").textContent = !state.startedAt ? "Your separate practice computer starts when you do." : edited ? "You have unsaved edits. They haven’t been checked." : !checking && state.result && !current ? "Your latest edits haven’t been checked yet." : state.detail;
-  $("progress").hidden = !checking && state.phase !== "closing" && !state.error;
+  $("check-summary").textContent = state.phase === "stopping" ? "Stopping checks…" : checking ? "Checking your change…" : current ? passed === 3 ? "All 3 checks passed." : `${passed} of 3 passed. ${3 - passed === 1 ? "One needs" : "Some need"} a fix.` : "Code changed. Run checks again.";
+  $("progress-copy").textContent = checking || state.phase === "closing" || state.error || state.detail.startsWith("Checks stopped.") ? state.detail : edited ? "You have unsaved edits. They haven’t been checked." : !checking && state.result && !current ? "Your latest edits haven’t been checked yet." : state.detail;
+  $("progress").hidden = !checking && state.phase !== "closing" && !state.error && !state.detail.startsWith("Checks stopped.");
   $("progress").dataset.busy = String(checking || state.phase === "closing"); $("progress").dataset.success = String(current && passed === 3);
   $("finish").hidden = !active && state.phase !== "error"; $("finish").disabled = busy;
   $("recap-title").textContent = current && passed === 3 ? "Your fix passed." : "Practice complete.";
