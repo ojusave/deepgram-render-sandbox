@@ -99,7 +99,10 @@ function renderProgress() {
     }));
     $("activity-history").replaceChildren(...phases.map((phase, index) => {
       const step = progress.steps[index], item = element("li", undefined, step.status);
-      item.append(element("strong", phase.title), element("span", statusWords[step.status], "step-state"), element("p", phase.detail));
+      // History uses completed or skipped wording, never a live claim for work that did not run.
+      const completed = [progress.status === "replied" ? "Deepgram replied without running a calculation." : "Deepgram prepared the calculation.", "The temporary workspace was ready. Your file and program were sent to it.", "The program finished running on your file.", "The output passed the table and chart format checks.", "The temporary workspace stopped and its closure was confirmed."];
+      const detail = step.status === "done" ? completed[index] : step.status === "waiting" ? progress.status === "running" ? "This step has not started yet." : "This step did not run." : step.status === "cancelled" ? "Stopped before this step finished." : step.status === "failed" ? "This step could not finish." : phase.detail;
+      item.append(element("strong", phase.title), element("span", statusWords[step.status], "step-state"), element("p", detail));
       if (step.startedAt) item.append(element("time", "Started " + new Date(step.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })));
       return item;
     }));
