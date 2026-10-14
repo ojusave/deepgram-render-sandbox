@@ -1,60 +1,59 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <!-- The page has no external fonts, trackers, or required image downloads. -->
+  <!-- Local styles and a responsive viewport let the same screen work on phones and computers. -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#f7f8fa" />
-  <meta name="description" content="Practice explaining and fixing a small Python bug with a voice coach and real checks." />
+  <meta name="theme-color" content="#fafaf8" />
+  <meta name="description" content="Talk through a small Python bug with a voice coach, then test your fix." />
   <title>Think Aloud · Debugging practice</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <!-- Keyboard users can skip the top bar and go straight to the exercise. -->
-  <a class="skip" href="#exercise">Skip to exercise</a>
-  <header class="topbar">
-    <a class="wordmark" href="/" aria-label="Think Aloud home"><span class="brand-mark" aria-hidden="true">ta.</span>think aloud<span class="demo-label">practice lab</span></a>
-    <div class="top-meta"><span class="live-dot" aria-hidden="true"></span><span>Powered by Deepgram + Render</span></div>
-  </header>
-  <main>
-    <!-- A short introduction explains the task before exposing any technical controls. -->
-    <section class="intro" aria-labelledby="page-title">
-      <div><p class="eyebrow">A SMALL BUG. A BETTER EXPLANATION.</p><h1 id="page-title">Practice thinking out loud.</h1><p class="lede">Fix a little code. Talk through your reasoning.<br class="desktop-break" /> Your coach helps you find your way, one question at a time.</p></div>
-      <div class="session-meta"><span class="meta-icon" aria-hidden="true">◷</span><div><strong id="clock">10-minute practice</strong><span>Python · Beginner friendly</span></div></div>
-    </section>
+  <!-- The skip link gives keyboard users a direct route past the small header. -->
+  <a class="skip" href="#main">Skip to practice</a>
+  <header class="topbar"><a class="wordmark" href="/" aria-label="Think Aloud home">think aloud<span aria-hidden="true">.</span></a><span class="byline">Deepgram + Render</span></header>
+  <main id="main" tabindex="-1">
     <div id="error" class="error" role="alert" hidden></div>
-    <!-- One conversational panel and one task panel keep the learner's next action in view. -->
-    <div class="practice-layout">
-      <section class="coach-panel" aria-labelledby="coach-heading">
-        <div class="panel-label"><span class="eyebrow" id="coach-heading">YOUR PRACTICE PARTNER</span><span id="coach-tag" class="small-tag">Ready when you are</span></div>
-        <div class="voice-scene" id="voice-scene" data-mode="quiet" aria-hidden="true"><div class="voice-ring"><div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div></div>
-        <div class="coach-intro" id="coach-intro"><h2>A conversation,<br /> with room to think.</h2><p>Explain what you notice. Ask for a hint. Your coach can check the code you’re working on.</p></div>
-        <!-- Voice is the primary path. Text remains available for quiet rooms and accessibility. -->
-        <div id="start-controls"><button id="start" class="primary wide" disabled><span aria-hidden="true">◉</span> Start with voice</button><button id="start-text" class="text-button wide" disabled>Use text instead</button><p class="permission-note">Your browser will ask to use your microphone.</p></div>
-        <div id="voice-controls" hidden><div id="voice-status" class="voice-status" role="status">Coach is disconnected</div><div class="voice-buttons"><button id="talk" class="primary">Connect voice</button><button id="mute" class="secondary" aria-pressed="false" hidden>Mute mic</button></div></div>
-        <!-- Real conversation text makes spoken feedback available to people who cannot hear it. -->
-        <div id="dialogue" class="dialogue" hidden><div class="conversation-heading"><span>Conversation</span><button id="feedback" class="text-button">Get feedback</button></div><div id="messages" class="messages" role="log" aria-label="Conversation with your coach" aria-live="polite" aria-relevant="additions text"></div><div id="thinking" class="thinking" role="status" hidden>Coach is thinking…</div><form id="ask-form"><label class="sr-only" for="question">Message your coach</label><input id="question" maxlength="1500" placeholder="Share your thinking, or ask for a hint…" autocomplete="off" /><button id="send" aria-label="Send message" title="Send message">↑</button></form></div>
-        <p id="coach-offline" class="small-note" hidden>You can keep editing and checking your code. Reconnect to continue the conversation.</p>
+    <!-- Only the invitation appears before starting. Code and results belong to the next screen. -->
+    <section id="welcome" class="welcome" aria-labelledby="welcome-title">
+      <p class="eyebrow">10 MINUTES · PYTHON</p>
+      <h1 id="welcome-title" tabindex="-1">A small bug.<br />Talk it through.</h1>
+      <p class="lede">Explain your thinking to a voice coach.<br />Make a change. See if it works.</p>
+      <div id="start-controls"><button id="start" class="primary" disabled>Start with voice <span aria-hidden="true">↗</span></button><button id="start-text" class="text-button" disabled>Use text instead</button></div>
+      <p class="permission-note">Microphone needed for voice. One beginner exercise.</p>
+    </section>
+    <!-- The working view has one file, one run action, and one compact conversation. -->
+    <section id="practice" class="practice" aria-labelledby="exercise-title" hidden>
+      <div class="session-heading"><div><p class="eyebrow">YOUR EXERCISE</p><h1 id="exercise-title" tabindex="-1">The empty-list bug</h1></div><div class="session-actions"><span id="clock">10:00</span><button id="finish" class="text-button">Finish practice</button></div></div>
+      <p class="brief">This function crashes when there are no customers. Make it return <code>0</code> for an empty list.</p>
+      <!-- The status is real server progress, not a simulated percentage or animation timeline. -->
+      <p id="progress" class="progress" role="status"><span class="status-dot" aria-hidden="true"></span><span id="progress-copy">Preparing your exercise…</span></p>
+      <div class="editor">
+        <div class="editor-bar"><label for="code">average.py</label><span id="save-state">Preparing…</span></div>
+        <textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-describedby="editor-help" aria-label="Python code for average_wait" wrap="off" readonly></textarea>
+        <div class="editor-actions"><span id="editor-help" class="sr-only">Use spaces to indent. Tab moves to the next control.</span><button id="reset" class="text-button" disabled>Reset code</button><div><button id="run" class="primary" disabled>Run checks <span aria-hidden="true">↗</span></button><button id="stop-checks" class="secondary" hidden>Stop checks</button></div></div>
+        <!-- A one-line result is always visible after a run; individual cases expand on request. -->
+        <details id="check-details" class="check-details" hidden><summary><span id="check-summary">Checks have not run yet.</span><span class="detail-label">Details</span></summary><div id="checks" class="checks" aria-live="polite"></div></details>
+      </div>
+      <section class="coach" aria-labelledby="coach-heading">
+        <div class="coach-heading"><div class="coach-identity"><span id="voice-scene" class="voice-dot" data-mode="quiet" aria-hidden="true"></span><h2 id="coach-heading">Your coach</h2><span id="coach-tag">Connecting</span></div><div id="voice-controls" class="voice-controls"><button id="mute" class="text-button" aria-pressed="false" hidden>Mute mic</button><button id="talk" class="text-button">Connect voice</button></div></div>
+        <!-- The latest spoken reply stays visible as a caption, including when history is collapsed. -->
+        <p id="caption" class="caption" aria-live="polite">Take a look at the function. Where would you look first?</p>
+        <p id="voice-status" class="voice-status" role="status">Connecting your coach…</p>
+        <p id="thinking" class="voice-status" role="status" hidden>Thinking about your explanation…</p>
+        <p id="coach-offline" class="voice-status" hidden>Reconnect to talk. Your code is still here.</p>
+        <!-- Text remains available without requiring microphone access or opening the transcript. -->
+        <form id="ask-form"><label class="sr-only" for="question">Message your coach</label><input id="question" maxlength="1500" placeholder="Share your thinking…" autocomplete="off" /><button id="send" aria-label="Send message">↑</button></form>
+        <div class="coach-tools"><button id="type-toggle" class="text-button" aria-expanded="false" hidden>Type a message</button><button id="feedback" class="text-button" hidden>Get feedback</button></div>
+        <details id="conversation" class="conversation"><summary>Conversation</summary><div id="messages" class="messages" role="log" aria-label="Conversation with your coach" aria-live="off"></div></details>
       </section>
-      <section id="exercise" class="exercise-panel" aria-labelledby="exercise-title" tabindex="-1">
-        <div class="exercise-heading"><div><p class="eyebrow">EXERCISE 01</p><h2 id="exercise-title">The empty-list bug</h2></div><span class="language-tag">Python</span></div>
-        <p class="brief">A support dashboard shows the average customer wait. It works until there are <strong>no customers</strong>. Find the bug and make it return <code>0</code> for an empty list.</p>
-        <p class="prompt"><span aria-hidden="true">↳</span> Before changing anything, explain where you’d look first.</p>
-        <div id="progress" class="progress-line" role="status"><span class="status-mark" aria-hidden="true"></span><span id="progress-copy">Your separate practice computer starts when you do.</span></div>
-        <!-- A native text area stays easy to edit and keyboard-accessible without a full IDE. -->
-        <div class="editor"><div class="editor-bar"><label for="code"><span aria-hidden="true">⌘</span> average.py</label><span id="save-state">Start practice to edit</span></div><textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-describedby="editor-help" aria-label="Python code for average_wait" wrap="off" readonly></textarea><div class="editor-footer"><span id="editor-help">Use spaces to indent. Tab moves to the next control.</span><button id="reset" class="text-button" disabled>Reset code</button></div></div>
-        <!-- These rows are filled from actual execution. Empty rows are explicitly not run yet. -->
-        <div class="checks-heading"><div><h3>Check your change</h3><p id="check-summary">Three small checks. No results yet.</p></div><button id="run" class="primary" disabled><span aria-hidden="true">▷</span> Run checks</button><button id="stop-checks" class="secondary" hidden>Stop checks</button></div>
-        <div id="checks" class="checks" aria-live="polite"></div>
-      </section>
-    </div>
-    <!-- A truthful recap and an explicit end action close the resource lifecycle. -->
-    <section id="recap" class="recap" aria-labelledby="recap-title" hidden><div><p class="eyebrow">YOUR PRACTICE RECAP</p><h2 id="recap-title">Practice complete.</h2><p id="recap-detail"></p><p class="small-note">Keep your code and conversation to review what you explained.</p></div><div class="recap-actions"><a class="primary button-link" href="/api/download">Download recap</a><button id="again" class="secondary">Practice again</button></div></section>
-    <div class="session-footer"><span id="session-note">One exercise. Your own temporary workspace. Start over any time.</span><button id="finish" class="text-button" hidden>Finish practice</button></div>
-    <!-- Optional details explain the providers and data flow without filling the working screen. -->
-    <details class="how"><summary>What’s happening behind the scenes?</summary><div class="how-content"><p><strong>Deepgram is your voice connection.</strong> It listens, speaks, and connects a language model that asks follow-up questions. The coach reads your saved code when you ask about it.</p><p><strong>Render is your practice computer.</strong> Your code runs in a separate temporary workspace, called a sandbox. The same workspace stays open during your exercise and closes when you finish or after ten minutes.</p><p>Audio, conversation, code, and check results are processed by Deepgram and its language-model provider. Your code also runs on Render. This demo holds your code and conversation in server memory for up to an hour, or until the server restarts. Use the sample exercise, not private information.</p><p id="workspace-detail">No practice computer has been created.</p><p class="small-note">An independent integration demo. Three passing checks show this exercise works for those inputs; they are not a hiring assessment.</p></div></details>
+    </section>
+    <!-- Finish replaces the workspace with one result and a downloadable record of the session. -->
+    <section id="recap" class="recap" aria-labelledby="recap-title" hidden><p class="eyebrow">PRACTICE COMPLETE</p><h1 id="recap-title" tabindex="-1">Your fix passed.</h1><p id="recap-detail" class="lede"></p><p id="session-note" class="permission-note"></p><div class="recap-actions"><a class="primary" href="/api/download">Download recap <span aria-hidden="true">↓</span></a><button id="again" class="text-button">Practice again</button></div></section>
   </main>
-  <footer class="site-footer"><span>Think Aloud</span><span>Made for the moment before “let me explain.”</span></footer>
+  <!-- Provider roles and data handling stay available without competing with the actual task. -->
+  <footer class="footer"><details class="how"><summary>About this demo</summary><div class="how-content"><p><strong>Deepgram handles the conversation.</strong> It listens and speaks, with a language model that responds to your saved code and real check results.</p><p><strong>Render runs your code.</strong> Each session gets a separate temporary computer, called a sandbox. It stays open during practice and closes when you finish or after ten minutes.</p><p>Audio, conversation, code, and results are processed by Deepgram and its language-model provider. Code also runs on Render. This app keeps your work in server memory for up to an hour, or until restart. Use the included example rather than private information.</p><p id="workspace-detail">No practice computer has been created.</p><p>Independent integration demo. Passing three checks is not a hiring assessment.</p></div></details></footer>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

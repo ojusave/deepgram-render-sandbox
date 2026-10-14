@@ -4,7 +4,7 @@ import { AgentMicrophone, AgentPlayer } from "@deepgram/agents";
 const $ = id => document.getElementById(id);
 let state, socket, connecting, ready = false, microphone, player, talking = false, muted = false;
 let busy = false, pendingReply = false, saving, saveTimer, polling = false, loaded = false, lastMessages = "", undoCode;
-let voiceLabel = "Coach is disconnected", voiceMode = "quiet", lastChecks = "";
+let voiceLabel = "Coach is disconnected", voiceMode = "quiet", lastChecks = "", showWelcome = false, typing = false, lastView = "welcome";
 const node = (tag, text, className) => { const item = document.createElement(tag); if (text !== undefined) item.textContent = text; if (className) item.className = className; return item; };
 // All user/provider text goes through textContent, never interpreted HTML.
 function showError(text = "") { $("error").textContent = text; $("error").hidden = !text; }
@@ -31,6 +31,9 @@ function render(next, replaceCode = false) {
     }));
     $("messages").scrollTop = $("messages").scrollHeight;
   }
+  // Show the real latest reply as the compact caption; the full exchange remains in Conversation.
+  const latest = state.messages.filter(message => message.role === "assistant").at(-1);
+  $("caption").textContent = latest?.content || "Connecting your coach…";
   if (state.phase === "ended" || state.phase === "closing") disconnectVoice();
   controls();
 }
@@ -52,23 +55,28 @@ function renderChecks() {
 function controls() {
   if (!state) return;
   const active = isActive(), checking = state.busy || ["preparing", "checking", "stopping"].includes(state.phase), current = currentChecks();
-  $("start-controls").hidden = !!state.startedAt;
+  // Reveal each screen only when needed. Moving focus makes the change clear to keyboard users.
+  const view = showWelcome || !state.startedAt ? "welcome" : state.endedAt ? "recap" : "practice";
+  $("welcome").hidden = view !== "welcome"; $("practice").hidden = view !== "practice"; $("recap").hidden = view !== "recap";
+  const viewChanged = lastView !== view, stopFocused = document.activeElement === $("stop-checks");
   $("start").disabled = busy || !state.voiceAvailable || !state.practiceAvailable;
   $("start-text").disabled = busy || !state.practiceAvailable;
-  $("start").textContent = busy ? "Starting practice…" : "◉  Start with voice";
-  $("coach-intro").hidden = !!state.startedAt;
-  document.querySelector(".coach-panel").classList.toggle("is-active", active);
-  $("voice-controls").hidden = !active; $("dialogue").hidden = !state.startedAt;
+  $("start").textContent = busy ? "Starting practice…" : "Start with voice ↗";
+  $("voice-controls").hidden = !active;
   $("voice-scene").dataset.mode = talking && !muted ? voiceMode : "quiet";
   $("voice-status").textContent = voiceLabel;
-  $("coach-tag").textContent = talking ? muted ? "Mic muted" : "Voice on" : state.connected ? "Text mode" : state.endedAt ? "Session complete" : active ? "Your coach" : "Ready when you are";
+  $("voice-status").hidden = !talking || pendingReply;
+  $("coach-tag").textContent = talking ? muted ? "Mic muted" : "Voice on" : state.connected ? "Text mode" : "Offline";
   $("talk").textContent = talking ? "End voice" : connecting ? "Connecting…" : "Connect voice";
   $("talk").disabled = !!connecting || !state.voiceAvailable || busy;
   $("mute").hidden = !talking; $("mute").textContent = muted ? "Unmute mic" : "Mute mic"; $("mute").setAttribute("aria-pressed", String(muted));
+  $("ask-form").hidden = talking && !typing;
+  $("type-toggle").hidden = !talking; $("type-toggle").textContent = typing ? "Hide typing" : "Type a message"; $("type-toggle").setAttribute("aria-expanded", String(typing));
   $("question").disabled = !active || busy || !!connecting || pendingReply;
   $("send").disabled = $("question").disabled || !$("question").value.trim();
+  $("feedback").hidden = !(current && state.result?.checks.every(item => item.passed));
   $("feedback").disabled = !active || pendingReply || !state.messages.some(message => message.role === "user");
-  $("thinking").hidden = !pendingReply;
+  $("thinking").hidden = !pendingReply || !!connecting;
   $("coach-offline").hidden = !active || !!socket || !!connecting;
   $("code").readOnly = !active || state.phase === "preparing" || busy;
   $("reset").disabled = $("code").readOnly || checking;
@@ -76,18 +84,24 @@ function controls() {
   $("run").hidden = checking; $("run").disabled = !active || busy || !!saving || state.attempts >= 15;
   $("stop-checks").hidden = !checking || state.phase === "closing"; $("stop-checks").disabled = state.phase === "stopping";
   const edited = $("code").value !== state.code;
-  $("save-state").textContent = !state.startedAt ? "Start practice to edit" : state.endedAt ? "Session complete" : saving ? "Saving…" : edited ? "Unsaved changes" : "Saved for your coach";
+  $("save-state").textContent = !state.startedAt ? "Start practice to edit" : state.endedAt ? "Session complete" : saving ? "Saving…" : edited ? "Unsaved changes" : "Saved";
   const passed = state.result?.checks.filter(item => item.passed).length || 0;
-  $("check-summary").textContent = state.phase === "preparing" ? "Preparing your practice computer." : checking ? "Running your code, one case at a time." : state.result ? current ? `${passed} of 3 passed on this version.` : "Code changed. Run checks on this version." : "Three small checks. No results yet.";
+  // Keep the outcome concise; the individual inputs and errors are available in Details.
+  $("check-details").hidden = !state.result && !state.partial?.length;
+  $("check-details").dataset.passed = String(current && passed === 3);
+  $("check-summary").textContent = checking ? "Checking your change…" : current ? passed === 3 ? "All 3 checks passed." : `${passed} of 3 passed. ${3 - passed === 1 ? "One needs" : "Some need"} a fix.` : "Code changed. Run checks again.";
   $("progress-copy").textContent = !state.startedAt ? "Your separate practice computer starts when you do." : edited ? "You have unsaved edits. They haven’t been checked." : !checking && state.result && !current ? "Your latest edits haven’t been checked yet." : state.detail;
+  $("progress").hidden = !checking && state.phase !== "closing" && !state.error;
   $("progress").dataset.busy = String(checking || state.phase === "closing"); $("progress").dataset.success = String(current && passed === 3);
   $("finish").hidden = !active && state.phase !== "error"; $("finish").disabled = busy;
-  $("recap").hidden = !state.endedAt;
-  $("recap-title").textContent = current && passed === 3 ? "Your fix passed all three checks." : "A little practice goes a long way.";
+  $("recap-title").textContent = current && passed === 3 ? "Your fix passed." : "Practice complete.";
   $("recap-detail").textContent = `${state.attempts} completed check ${state.attempts === 1 ? "run" : "runs"}. ` + (current ? `${passed} of 3 checks passed on your final code.` : "Your final edits have not been checked.");
   $("again").disabled = busy || state.phase !== "ended";
   $("workspace-detail").textContent = state.workspace ? `Practice computer: ${state.workspace.id}. ${state.workspace.cleanup === "terminated" ? "Closure confirmed." : state.workspace.cleanup === "open" ? "Open for this exercise. Outbound internet access is blocked." : "Closure is not yet confirmed."}` : "No practice computer has been created.";
   renderChecks(); renderClock();
+  // Update text before announcing a new screen, and return keyboard focus after a check finishes.
+  if (viewChanged) { $(view === "practice" ? "exercise-title" : view === "recap" ? "recap-title" : "welcome-title").focus(); lastView = view; }
+  else if (stopFocused && !checking && active) $("run").focus();
 }
 // Save edits in order. New typing is preserved while an earlier save is in flight.
 async function flushCode() {
@@ -159,7 +173,9 @@ async function start(withVoice) {
   busy = true; showError(); controls();
   try {
     if (withVoice) await enableAudio();
-    render(await request("/api/start", {}), true); undoCode = undefined;
+    const next = await request("/api/start", {});
+    showWelcome = false; typing = false; $("check-details").open = false; $("conversation").open = false;
+    render(next, true); undoCode = undefined;
     busy = false; controls();
     await ask("Let's begin the exercise. Ask me where I would look first.");
     if (!withVoice) $("question").focus();
@@ -168,7 +184,9 @@ async function start(withVoice) {
   } finally { busy = false; controls(); }
 }
 $("start").onclick = () => void start(true); $("start-text").onclick = () => void start(false);
-$("again").onclick = () => void start(false);
+// Starting again returns to the invitation before creating another paid practice computer.
+$("again").onclick = () => { showWelcome = true; showError(); controls(); };
+$("type-toggle").onclick = () => { typing = !typing; controls(); if (typing) $("question").focus(); };
 $("talk").onclick = async () => {
   if (talking) { disconnectVoice(); controls(); return; }
   showError(); busy = true; controls();
@@ -186,7 +204,7 @@ $("mute").onclick = async () => {
 $("ask-form").onsubmit = event => { event.preventDefault(); void ask($("question").value.trim()); };
 $("question").oninput = controls;
 $("feedback").onclick = () => void ask("Give me brief feedback on how I explained my reasoning so far, and one next practice step.");
-$("run").onclick = async () => { busy = true; showError(); controls(); try { await flushCode(); render(await request("/api/check", {})); } catch (error) { showError(error.message); } finally { busy = false; controls(); } };
+$("run").onclick = async () => { busy = true; showError(); controls(); try { await flushCode(); render(await request("/api/check", {})); $("stop-checks").focus(); } catch (error) { showError(error.message); } finally { busy = false; controls(); } };
 $("stop-checks").onclick = async () => { try { render(await request("/api/stop", {})); } catch (error) { showError(error.message); } };
 $("finish").onclick = async () => {
   busy = true; showError(); controls();
@@ -198,7 +216,7 @@ $("finish").onclick = async () => {
 function renderClock() {
   if (!state) return;
   const remaining = Math.max(0, Math.ceil(((state.expiresAt || Date.now()) - Date.now()) / 1000));
-  $("clock").textContent = isActive() ? `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")} remaining` : state.endedAt ? "Practice complete" : "10-minute practice";
+  $("clock").textContent = isActive() ? `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}` : state.endedAt ? "Practice complete" : "10-minute practice";
   $("session-note").textContent = state.endedAt ? "Your practice computer is closed. Your recap is ready to keep." : isActive() ? `Your workspace stays open for this exercise. ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")} left.` : state.phase === "closing" ? "Closing your workspace and preparing the recap…" : "One exercise. Your own temporary workspace. Start over any time.";
 }
 // Polling restores results after refresh and observes cleanup even without a voice connection.
